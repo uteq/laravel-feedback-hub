@@ -77,6 +77,7 @@ php artisan feedback-hub:health --live
 php artisan feedback-hub:test-delivery
 php artisan feedback-hub:test-delivery --send
 php artisan feedback-hub:telegram-discover
+php artisan feedback-hub:telegram-resolve @public_channel
 php artisan feedback-hub:telegram-test "Feedback Hub test"
 ```
 

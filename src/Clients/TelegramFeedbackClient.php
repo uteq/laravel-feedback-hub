@@ -64,8 +64,16 @@ class TelegramFeedbackClient
      */
     public function getChat(): array
     {
+        return $this->resolveChat((string) config('feedback-hub.telegram.chat_id'));
+    }
+
+    /**
+     * @return array{ok: bool, id?: string, title?: string, type?: string}
+     */
+    public function resolveChat(string $chatId): array
+    {
         $response = Http::get($this->endpoint('getChat'), [
-            'chat_id' => (string) config('feedback-hub.telegram.chat_id'),
+            'chat_id' => $chatId,
         ]);
 
         if (! $response->successful() || ! $response->json('ok')) {
@@ -74,7 +82,9 @@ class TelegramFeedbackClient
 
         return [
             'ok' => true,
+            'id' => (string) $response->json('result.id'),
             'title' => (string) ($response->json('result.title') ?: $response->json('result.username')),
+            'type' => (string) $response->json('result.type'),
         ];
     }
 
