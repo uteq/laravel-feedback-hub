@@ -5,13 +5,18 @@ window.FeedbackHubInspector = {
     interactionBlocker: null,
     instructionBanner: null,
     boundHandleEscape: null,
+    boundHandleDocumentClick: null,
+    boundHandlePointerMove: null,
     originalFetch: null,
     originalConsoleError: null,
+    originalBodyCursor: null,
 
     init() {
         if (this.highlightOverlay) return;
 
         this.boundHandleEscape = this.handleEscape.bind(this);
+        this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
+        this.boundHandlePointerMove = this.handlePointerMove.bind(this);
         this.createOverlay();
         this.createInteractionBlocker();
         this.createInstructionBanner();
@@ -41,9 +46,13 @@ window.FeedbackHubInspector = {
 
     activate() {
         this.active = true;
+        this.originalBodyCursor = document.body.style.cursor || '';
+        document.body.style.cursor = 'crosshair';
         this.showInstructionBanner();
         this.showInteractionBlocker();
         document.addEventListener('keydown', this.boundHandleEscape);
+        document.addEventListener('click', this.boundHandleDocumentClick, true);
+        document.addEventListener('mousemove', this.boundHandlePointerMove, true);
     },
 
     deactivate() {
@@ -51,7 +60,10 @@ window.FeedbackHubInspector = {
         this.hideInstructionBanner();
         this.hideInteractionBlocker();
         this.hideOverlay();
+        document.body.style.cursor = this.originalBodyCursor || '';
         document.removeEventListener('keydown', this.boundHandleEscape);
+        document.removeEventListener('click', this.boundHandleDocumentClick, true);
+        document.removeEventListener('mousemove', this.boundHandlePointerMove, true);
     },
 
     createInstructionBanner() {
@@ -92,23 +104,7 @@ window.FeedbackHubInspector = {
     createInteractionBlocker() {
         this.interactionBlocker = document.createElement('div');
         this.interactionBlocker.id = 'feedback-hub-interaction-blocker';
-        this.interactionBlocker.style.cssText = 'position:fixed;inset:0;z-index:99998;cursor:crosshair;display:none';
-
-        this.interactionBlocker.addEventListener('mousemove', (event) => {
-            this.highlightElement(this.getElementAtPoint(event.clientX, event.clientY));
-        });
-
-        this.interactionBlocker.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-
-            const element = this.getElementAtPoint(event.clientX, event.clientY);
-            if (!element || element === document.body || element === document.documentElement) return;
-
-            this.selectedElement = element;
-            this.deactivate();
-            this.captureAndOpen();
-        });
+        this.interactionBlocker.style.cssText = 'position:fixed;inset:0;z-index:99998;display:none;pointer-events:none';
 
         document.body.appendChild(this.interactionBlocker);
     },
@@ -136,6 +132,27 @@ window.FeedbackHubInspector = {
         if (element === this.instructionBanner || this.instructionBanner?.contains(element)) return null;
 
         return element;
+    },
+
+    handleDocumentClick(event) {
+        if (!this.active) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        const element = this.getElementAtPoint(event.clientX, event.clientY);
+        if (!element || element === document.body || element === document.documentElement) return;
+
+        this.selectedElement = element;
+        this.deactivate();
+        this.captureAndOpen();
+    },
+
+    handlePointerMove(event) {
+        if (!this.active) return;
+
+        this.highlightElement(this.getElementAtPoint(event.clientX, event.clientY));
     },
 
     handleEscape(event) {

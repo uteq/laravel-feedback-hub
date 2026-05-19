@@ -15,5 +15,8 @@ it('publishes config migration and inspector asset', function (): void {
 
     expect($configPath)->toBeFile()
         ->and($assetPath)->toBeFile()
-        ->and($migrationPath)->toBeFile();
+        ->and($migrationPath)->toBeFile()
+        ->and(file_get_contents($assetPath))
+        ->toContain("document.addEventListener('click', this.boundHandleDocumentClick, true)")
+        ->toContain('pointer-events:none');
 });
