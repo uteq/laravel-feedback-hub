@@ -84,6 +84,15 @@ php artisan feedback-hub:telegram-test "Feedback Hub test"
 
 If discovery shows no channel, add the bot as channel admin, post once in the channel, or forward a channel post to the bot.
 
+## Telegram channel setup
+
+1. Create a dedicated Telegram channel or group for feedback notifications.
+2. Add the bot from `FEEDBACK_HUB_TELEGRAM_BOT_TOKEN` as a member. For channels, make it an admin so it can post.
+3. For public channels, run `php artisan feedback-hub:telegram-resolve @public_channel`.
+4. For private channels or groups, post once or forward a post to the bot, then run `php artisan feedback-hub:telegram-discover`.
+5. Set the returned ID as `FEEDBACK_HUB_TELEGRAM_CHAT_ID`.
+6. Run `php artisan feedback-hub:health --live` and `php artisan feedback-hub:test-delivery --send`.
+
 ## Privacy
 
 The browser sends field names, types and filled state only. Passwords, hidden fields, tokens, secrets and sensitive URL query values are excluded in the browser and filtered again on the server.
