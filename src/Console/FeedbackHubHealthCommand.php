@@ -91,6 +91,18 @@ class FeedbackHubHealthCommand extends Command
             return false;
         }
 
+        foreach ($this->csv((string) config('feedback-hub.github.labels')) as $label) {
+            $labelResponse = Http::withToken((string) config('feedback-hub.github.token'))
+                ->acceptJson()
+                ->get("https://api.github.com/repos/{$repo}/labels/".rawurlencode($label));
+
+            if (! $labelResponse->successful()) {
+                $this->components->error("GitHub label check failed: {$label}");
+
+                return false;
+            }
+        }
+
         $this->components->info('GitHub live check passed for '.$repo);
 
         return true;
@@ -162,6 +174,14 @@ class FeedbackHubHealthCommand extends Command
         }
 
         return false;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function csv(string $value): array
+    {
+        return array_values(array_filter(array_map('trim', explode(',', $value))));
     }
 
     private function checkTelegramLive(TelegramFeedbackClient $telegram): bool
