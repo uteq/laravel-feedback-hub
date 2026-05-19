@@ -80,4 +80,4 @@ php artisan feedback-hub:telegram-test "Feedback Hub test"
 
 ## Privacy
 
-The browser sends field names, types and filled state only. Passwords, hidden fields, tokens and secrets are excluded in the browser and filtered again on the server.
+The browser sends field names, types and filled state only. Passwords, hidden fields, tokens, secrets and sensitive URL query values are excluded in the browser and filtered again on the server.

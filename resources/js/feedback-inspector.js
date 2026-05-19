@@ -184,6 +184,15 @@ window.FeedbackHubInspector = {
         return path.slice(-4).join(' > ');
     },
 
+    redactText(value) {
+        if (!value) return value;
+
+        return String(value)
+            .replace(/([?&])([^=&#]*(?:password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey|key)[^=&#]*)=([^&#\s]*)/gi, '$1$2=[filtered]')
+            .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[filtered]')
+            .replace(/\b(password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey)\s*[:=]\s*([^\s,;&#]+)/gi, '$1=[filtered]');
+    },
+
     async captureScreenshot() {
         if (this.highlightOverlay) this.highlightOverlay.style.display = 'none';
 
@@ -244,7 +253,7 @@ window.FeedbackHubInspector = {
         console.error = (...args) => {
             window.__feedbackHubConsoleErrors.push({
                 type: 'error',
-                message: args.map((value) => String(value)).join(' ').slice(0, 500),
+                message: this.redactText(args.map((value) => String(value)).join(' ')).slice(0, 500),
                 timestamp: new Date().toISOString(),
             });
             window.__feedbackHubConsoleErrors = window.__feedbackHubConsoleErrors.slice(-30);
@@ -260,7 +269,7 @@ window.FeedbackHubInspector = {
 
         window.fetch = async (...args) => {
             const start = Date.now();
-            const url = typeof args[0] === 'string' ? args[0] : args[0]?.url;
+            const url = this.redactText(typeof args[0] === 'string' ? args[0] : args[0]?.url);
             const method = args[1]?.method || 'GET';
 
             try {
@@ -293,7 +302,7 @@ window.FeedbackHubInspector = {
 
     collectContext() {
         return {
-            url: window.location.href,
+            url: this.redactText(window.location.href),
             userAgent: navigator.userAgent,
             viewport: { width: window.innerWidth, height: window.innerHeight },
             screen: { width: screen.width, height: screen.height },

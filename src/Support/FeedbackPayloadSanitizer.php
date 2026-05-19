@@ -41,7 +41,7 @@ class FeedbackPayloadSanitizer
             }
 
             if (is_string($value)) {
-                $clean[$key] = mb_substr($value, 0, 500);
+                $clean[$key] = mb_substr($this->sanitizeString($value), 0, 500);
 
                 continue;
             }
@@ -63,5 +63,22 @@ class FeedbackPayloadSanitizer
         }
 
         return false;
+    }
+
+    private function sanitizeString(string $value): string
+    {
+        $value = preg_replace_callback(
+            '/([?&])([^=&#]*(?:password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey|key)[^=&#]*)=([^&#]*)/i',
+            fn (array $matches): string => $matches[1].$matches[2].'=[filtered]',
+            $value,
+        ) ?? $value;
+
+        $value = preg_replace('/\b(Bearer\s+)[A-Za-z0-9._~+\/=-]+/i', '$1[filtered]', $value) ?? $value;
+
+        return preg_replace(
+            '/\b(password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey)\s*[:=]\s*([^\s,;&#]+)/i',
+            '$1=[filtered]',
+            $value,
+        ) ?? $value;
     }
 }
