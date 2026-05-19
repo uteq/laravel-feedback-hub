@@ -101,7 +101,7 @@
                                     type: this.type,
                                     title: this.title,
                                     description: this.description,
-                                    url: window.location.href,
+                                    url: this.currentUrl(),
                                     element_selector: this.elementSelector,
                                     element_rect: this.elementRect,
                                     screenshot: this.screenshot,
@@ -126,9 +126,26 @@
                         }
                     },
 
+                    currentUrl() {
+                        return this.redactText(window.location.href);
+                    },
+
+                    redactText(value) {
+                        if (!value) return value;
+
+                        if (window.FeedbackHubInspector?.redactText) {
+                            return window.FeedbackHubInspector.redactText(value);
+                        }
+
+                        return String(value)
+                            .replace(/([?&])([^=&#]*(?:password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey|key)[^=&#]*)=([^&#\s]*)/gi, '$1$2=[filtered]')
+                            .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[filtered]')
+                            .replace(/\b(password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey)\s*[:=]\s*([^\s,;&#]+)/gi, '$1=[filtered]');
+                    },
+
                     collectSessionData() {
                         return {
-                            url: window.location.href,
+                            url: this.currentUrl(),
                             userAgent: navigator.userAgent,
                             viewport: { width: window.innerWidth, height: window.innerHeight },
                             screen: { width: window.screen.width, height: window.screen.height },

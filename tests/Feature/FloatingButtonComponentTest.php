@@ -18,3 +18,19 @@ it('renders the widget for authenticated users', function (): void {
     expect($html)->toContain('data-feedback-hub-widget')
         ->and($html)->toContain('feedbackHubWidget');
 });
+
+it('redacts sensitive url values before the browser submits feedback', function (): void {
+    $user = User::query()->create([
+        'name' => 'Nathan Jansen',
+        'email' => 'nathan@example.test',
+    ]);
+
+    $html = $this->actingAs($user)->app['view']->make('feedback-hub::components.floating-button')->render();
+
+    expect($html)
+        ->toContain('url: this.currentUrl()')
+        ->toContain('url: this.currentUrl(),')
+        ->toContain('redactText(value)')
+        ->toContain('$1$2=[filtered]')
+        ->not->toContain('url: window.location.href');
+});
