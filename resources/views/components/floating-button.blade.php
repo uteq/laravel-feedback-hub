@@ -159,7 +159,7 @@
                     },
 
                     isSensitiveKey(key) {
-                        return ['password', 'passwd', 'token', 'secret', 'authorization', 'cookie', 'csrf', '_token', 'api_key', 'apikey'].some((part) => String(key).toLowerCase().includes(part));
+                        return ['password', 'passwd', 'hidden', 'token', 'secret', 'authorization', 'cookie', 'csrf', '_token', 'api_key', 'apikey'].some((part) => String(key).toLowerCase().includes(part));
                     },
 
                     collectSessionData() {

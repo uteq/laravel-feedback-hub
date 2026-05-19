@@ -6,6 +6,7 @@ it('filters sensitive keys recursively', function (): void {
     $payload = [
         'name' => 'Nathan',
         'csrf_token' => 'secret',
+        'hidden_customer_id' => 'secret',
         'nested' => [
             'api_key' => 'secret',
             'visible' => 'ok',
@@ -15,6 +16,7 @@ it('filters sensitive keys recursively', function (): void {
     expect(app(FeedbackPayloadSanitizer::class)->sanitize($payload))->toBe([
         'name' => 'Nathan',
         'csrf_token' => '[filtered]',
+        'hidden_customer_id' => '[filtered]',
         'nested' => [
             'api_key' => '[filtered]',
             'visible' => 'ok',

@@ -73,7 +73,7 @@ class FeedbackPayloadSanitizer
     {
         $normalized = mb_strtolower($key);
 
-        foreach (['password', 'passwd', 'token', 'secret', 'authorization', 'cookie', 'csrf', '_token', 'api_key', 'apikey', 'key'] as $needle) {
+        foreach (['password', 'passwd', 'hidden', 'token', 'secret', 'authorization', 'cookie', 'csrf', '_token', 'api_key', 'apikey', 'key'] as $needle) {
             if (str_contains($normalized, $needle)) {
                 return true;
             }

@@ -34,6 +34,7 @@ it('redacts sensitive url values before the browser submits feedback', function 
         ->toContain('redactPayload(value, key = null)')
         ->toContain('redactText(value)')
         ->toContain('isSensitiveKey(key)')
+        ->toContain("'hidden'")
         ->toContain('$1$2=[filtered]')
         ->not->toContain('url: window.location.href');
 });
