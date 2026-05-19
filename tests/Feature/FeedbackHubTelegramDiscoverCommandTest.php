@@ -12,6 +12,10 @@ it('lists telegram chat ids visible to the bot', function (): void {
     config()->set('feedback-hub.telegram.bot_token', 'telegram-token');
 
     Http::fake([
+        'api.telegram.org/bottelegram-token/getMe' => Http::response([
+            'ok' => true,
+            'result' => ['username' => 'feedback_bot'],
+        ]),
         'api.telegram.org/bottelegram-token/getUpdates*' => Http::response([
             'ok' => true,
             'result' => [
@@ -40,6 +44,7 @@ it('lists telegram chat ids visible to the bot', function (): void {
     ]);
 
     $this->artisan('feedback-hub:telegram-discover')
+        ->expectsOutputToContain('Bot: @feedback_bot')
         ->expectsTable(['chat_id', 'type', 'title'], [
             ['-100123', 'channel', 'Feedback Hub'],
             ['42', 'private', 'Nathan'],
@@ -47,5 +52,27 @@ it('lists telegram chat ids visible to the bot', function (): void {
         ->expectsOutputToContain('Set FEEDBACK_HUB_TELEGRAM_CHAT_ID to the chat_id for the feedback channel.')
         ->assertSuccessful();
 
-    Http::assertSentCount(1);
+    Http::assertSentCount(2);
+});
+
+it('shows the bot username when no telegram chats are visible yet', function (): void {
+    config()->set('feedback-hub.telegram.bot_token', 'telegram-token');
+
+    Http::fake([
+        'api.telegram.org/bottelegram-token/getMe' => Http::response([
+            'ok' => true,
+            'result' => ['username' => 'feedback_bot'],
+        ]),
+        'api.telegram.org/bottelegram-token/getUpdates*' => Http::response([
+            'ok' => true,
+            'result' => [],
+        ]),
+    ]);
+
+    $this->artisan('feedback-hub:telegram-discover')
+        ->expectsOutputToContain('Bot: @feedback_bot')
+        ->expectsOutputToContain('No Telegram chats found. Add the bot to the channel, send a message, then run this again.')
+        ->assertFailed();
+
+    Http::assertSentCount(2);
 });

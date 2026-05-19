@@ -19,6 +19,11 @@ class FeedbackHubTelegramDiscoverCommand extends Command
             return self::FAILURE;
         }
 
+        $bot = $telegram->getMe();
+        if ($bot['ok'] ?? false) {
+            $this->line('Bot: @'.$bot['username']);
+        }
+
         $rows = $this->chatRows($telegram->getUpdates((int) $this->option('limit')));
 
         if ($rows === []) {
