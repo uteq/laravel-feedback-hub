@@ -27,7 +27,7 @@ class FeedbackHubTelegramDiscoverCommand extends Command
         $rows = $this->chatRows($telegram->getUpdates((int) $this->option('limit')));
 
         if ($rows === []) {
-            $this->components->warn('No Telegram chats found. Add the bot to the channel, send a message, then run this again.');
+            $this->components->warn('No Telegram chats found. Add the bot to the channel as admin, post once, forward a channel post to the bot, or set FEEDBACK_HUB_TELEGRAM_CHAT_ID to the public @channel username.');
 
             return self::FAILURE;
         }

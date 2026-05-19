@@ -117,7 +117,7 @@ it('shows the bot username when no telegram chats are visible yet', function ():
 
     $this->artisan('feedback-hub:telegram-discover')
         ->expectsOutputToContain('Bot: @feedback_bot')
-        ->expectsOutputToContain('No Telegram chats found. Add the bot to the channel, send a message, then run this again.')
+        ->expectsOutputToContain('No Telegram chats found. Add the bot to the channel as admin, post once, forward a channel post to the bot, or set FEEDBACK_HUB_TELEGRAM_CHAT_ID to the public @channel username.')
         ->assertFailed();
 
     Http::assertSentCount(2);
