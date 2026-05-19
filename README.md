@@ -80,6 +80,8 @@ php artisan feedback-hub:telegram-discover
 php artisan feedback-hub:telegram-test "Feedback Hub test"
 ```
 
+If discovery shows no channel, add the bot as channel admin, post once in the channel, or forward a channel post to the bot.
+
 ## Privacy
 
 The browser sends field names, types and filled state only. Passwords, hidden fields, tokens, secrets and sensitive URL query values are excluded in the browser and filtered again on the server.

@@ -47,11 +47,8 @@ class FeedbackHubTelegramDiscoverCommand extends Command
         $rows = [];
 
         foreach ($updates as $update) {
-            foreach (['channel_post', 'message', 'my_chat_member', 'chat_member'] as $source) {
-                $payload = $update[$source] ?? null;
-                $chat = is_array($payload) ? ($payload['chat'] ?? null) : null;
-
-                if (! is_array($chat) || ! isset($chat['id'])) {
+            foreach ($this->chatsFromUpdate($update) as $chat) {
+                if (! isset($chat['id'])) {
                     continue;
                 }
 
@@ -65,5 +62,47 @@ class FeedbackHubTelegramDiscoverCommand extends Command
         }
 
         return array_values($rows);
+    }
+
+    /**
+     * @param  array<string, mixed>  $update
+     * @return array<int, array<string, mixed>>
+     */
+    private function chatsFromUpdate(array $update): array
+    {
+        $chats = [];
+
+        foreach (['channel_post', 'message', 'my_chat_member', 'chat_member'] as $source) {
+            $payload = $update[$source] ?? null;
+            $chat = is_array($payload) ? ($payload['chat'] ?? null) : null;
+
+            if (is_array($chat)) {
+                $chats[] = $chat;
+            }
+
+            if ($source !== 'message' || ! is_array($payload)) {
+                continue;
+            }
+
+            $forwardFromChat = $payload['forward_from_chat'] ?? null;
+            if (is_array($forwardFromChat)) {
+                $chats[] = $forwardFromChat;
+            }
+
+            $forwardOrigin = $payload['forward_origin'] ?? null;
+            if (! is_array($forwardOrigin)) {
+                continue;
+            }
+
+            foreach (['chat', 'sender_chat'] as $originChatKey) {
+                $originChat = $forwardOrigin[$originChatKey] ?? null;
+
+                if (is_array($originChat)) {
+                    $chats[] = $originChat;
+                }
+            }
+        }
+
+        return $chats;
     }
 }

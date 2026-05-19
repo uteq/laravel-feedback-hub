@@ -49,6 +49,39 @@ it('lists telegram chat ids visible to the bot', function (): void {
                         ],
                     ],
                 ],
+                [
+                    'update_id' => 4,
+                    'message' => [
+                        'chat' => [
+                            'id' => 42,
+                            'type' => 'private',
+                            'first_name' => 'Nathan',
+                        ],
+                        'forward_origin' => [
+                            'type' => 'channel',
+                            'chat' => [
+                                'id' => -100789,
+                                'type' => 'channel',
+                                'title' => 'Forwarded Feedback Channel',
+                            ],
+                        ],
+                    ],
+                ],
+                [
+                    'update_id' => 5,
+                    'message' => [
+                        'chat' => [
+                            'id' => 42,
+                            'type' => 'private',
+                            'first_name' => 'Nathan',
+                        ],
+                        'forward_from_chat' => [
+                            'id' => -100987,
+                            'type' => 'channel',
+                            'title' => 'Legacy Forwarded Channel',
+                        ],
+                    ],
+                ],
             ],
         ]),
     ]);
@@ -59,6 +92,8 @@ it('lists telegram chat ids visible to the bot', function (): void {
             ['-100123', 'channel', 'Feedback Hub'],
             ['-100456', 'channel', 'Feedback Membership'],
             ['42', 'private', 'Nathan'],
+            ['-100789', 'channel', 'Forwarded Feedback Channel'],
+            ['-100987', 'channel', 'Legacy Forwarded Channel'],
         ])
         ->expectsOutputToContain('Set FEEDBACK_HUB_TELEGRAM_CHAT_ID to the chat_id for the feedback channel.')
         ->assertSuccessful();
