@@ -90,6 +90,20 @@
                             || window.Livewire?.csrfToken?.();
 
                         try {
+                            const payload = this.redactPayload({
+                                type: this.type,
+                                title: this.title,
+                                description: this.description,
+                                url: this.currentUrl(),
+                                element_selector: this.elementSelector,
+                                element_rect: this.elementRect,
+                                screenshot: this.screenshot,
+                                session_data: this.sessionData || this.collectSessionData(),
+                                console_errors: this.consoleErrors,
+                                network_requests: this.networkRequests,
+                                form_state: this.formState,
+                            });
+
                             const response = await fetch(this.endpoint, {
                                 method: 'POST',
                                 headers: {
@@ -97,19 +111,7 @@
                                     'X-CSRF-TOKEN': csrfToken,
                                     'Accept': 'application/json',
                                 },
-                                body: JSON.stringify({
-                                    type: this.type,
-                                    title: this.title,
-                                    description: this.description,
-                                    url: this.currentUrl(),
-                                    element_selector: this.elementSelector,
-                                    element_rect: this.elementRect,
-                                    screenshot: this.screenshot,
-                                    session_data: this.sessionData || this.collectSessionData(),
-                                    console_errors: this.consoleErrors,
-                                    network_requests: this.networkRequests,
-                                    form_state: this.formState,
-                                }),
+                                body: JSON.stringify(payload),
                             });
 
                             const data = await response.json().catch(() => ({}));
@@ -141,6 +143,23 @@
                             .replace(/([?&])([^=&#]*(?:password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey|key)[^=&#]*)=([^&#\s]*)/gi, '$1$2=[filtered]')
                             .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[filtered]')
                             .replace(/\b(password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey)\s*[:=]\s*([^\s,;&#]+)/gi, '$1=[filtered]');
+                    },
+
+                    redactPayload(value, key = null) {
+                        if (key && this.isSensitiveKey(key)) return '[filtered]';
+                        if (Array.isArray(value)) return value.map((item) => this.redactPayload(item));
+                        if (value && typeof value === 'object') {
+                            return Object.fromEntries(
+                                Object.entries(value).map(([entryKey, entryValue]) => [entryKey, this.redactPayload(entryValue, entryKey)])
+                            );
+                        }
+                        if (typeof value === 'string') return this.redactText(value);
+
+                        return value;
+                    },
+
+                    isSensitiveKey(key) {
+                        return ['password', 'passwd', 'token', 'secret', 'authorization', 'cookie', 'csrf', '_token', 'api_key', 'apikey'].some((part) => String(key).toLowerCase().includes(part));
                     },
 
                     collectSessionData() {

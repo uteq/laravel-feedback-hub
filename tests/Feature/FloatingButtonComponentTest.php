@@ -29,8 +29,11 @@ it('redacts sensitive url values before the browser submits feedback', function 
 
     expect($html)
         ->toContain('url: this.currentUrl()')
-        ->toContain('url: this.currentUrl(),')
+        ->toContain('const payload = this.redactPayload({')
+        ->toContain('body: JSON.stringify(payload)')
+        ->toContain('redactPayload(value, key = null)')
         ->toContain('redactText(value)')
+        ->toContain('isSensitiveKey(key)')
         ->toContain('$1$2=[filtered]')
         ->not->toContain('url: window.location.href');
 });
