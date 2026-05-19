@@ -6,13 +6,17 @@ use Uteq\FeedbackHub\Models\FeedbackReport;
 
 class IssueBodyBuilder
 {
+    public function __construct(
+        private FeedbackPayloadSanitizer $sanitizer,
+    ) {}
+
     public function build(FeedbackReport $report): string
     {
         $lines = [
             "**Reference:** {$report->reference}",
-            "**Project:** {$report->project}",
+            '**Project:** '.$this->redact((string) $report->project),
             "**Type:** {$report->type}",
-            "**URL:** {$report->page_url}",
+            '**URL:** '.$this->redact((string) $report->page_url),
             '**Reporter:** '.$this->reporter($report),
             "**Admin:** {$report->adminUrl()}",
             "**Date:** {$report->created_at?->format('Y-m-d H:i')}",
@@ -22,12 +26,12 @@ class IssueBodyBuilder
         if ($report->description) {
             $lines[] = '## Description';
             $lines[] = '';
-            $lines[] = $report->description;
+            $lines[] = $this->redact((string) $report->description);
             $lines[] = '';
         }
 
         if ($report->element_selector) {
-            $lines[] = "**Element:** `{$report->element_selector}`";
+            $lines[] = '**Element:** `'.$this->redact((string) $report->element_selector).'`';
             $lines[] = '';
         }
 
@@ -53,11 +57,11 @@ class IssueBodyBuilder
         ]);
 
         return implode("\n", array_filter([
-            "Nieuwe feedback voor {$report->project}",
-            "{$report->reference}: {$report->title}",
+            'Nieuwe feedback voor '.$this->redact((string) $report->project),
+            "{$report->reference}: ".$this->redact((string) $report->title),
             "Type: {$report->type}",
             'Melder: '.$this->reporter($report),
-            "URL: {$report->page_url}",
+            'URL: '.$this->redact((string) $report->page_url),
             implode("\n", $links),
         ]));
     }
@@ -69,6 +73,11 @@ class IssueBodyBuilder
         }
 
         return $report->reporter_name ?: $report->reporter_email ?: 'Unknown';
+    }
+
+    private function redact(string $value): string
+    {
+        return $this->sanitizer->redactString($value);
     }
 
     /**
