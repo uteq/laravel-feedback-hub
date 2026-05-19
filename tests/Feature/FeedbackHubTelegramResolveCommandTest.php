@@ -8,6 +8,14 @@ it('fails telegram resolve when bot token is not configured', function (): void 
         ->assertFailed();
 });
 
+it('fails telegram resolve when chat is missing', function (): void {
+    config()->set('feedback-hub.telegram.bot_token', 'telegram-token');
+
+    $this->artisan('feedback-hub:telegram-resolve')
+        ->expectsOutputToContain('Telegram chat is required. Use a public @channel username or --chat=-100123.')
+        ->assertFailed();
+});
+
 it('resolves a public telegram channel username', function (): void {
     config()->set('feedback-hub.telegram.bot_token', 'telegram-token');
 
@@ -32,6 +40,33 @@ it('resolves a public telegram channel username', function (): void {
     Http::assertSent(function ($request): bool {
         return str_contains($request->url(), 'api.telegram.org/bottelegram-token/getChat')
             && $request['chat_id'] === '@feedback';
+    });
+});
+
+it('resolves a numeric telegram chat id through an option', function (): void {
+    config()->set('feedback-hub.telegram.bot_token', 'telegram-token');
+
+    Http::fake([
+        'api.telegram.org/bottelegram-token/getChat*' => Http::response([
+            'ok' => true,
+            'result' => [
+                'id' => -100123,
+                'type' => 'channel',
+                'title' => 'Feedback Hub',
+            ],
+        ]),
+    ]);
+
+    $this->artisan('feedback-hub:telegram-resolve --chat=-100123')
+        ->expectsTable(['chat_id', 'type', 'title'], [
+            ['-100123', 'channel', 'Feedback Hub'],
+        ])
+        ->expectsOutputToContain('Set FEEDBACK_HUB_TELEGRAM_CHAT_ID to -100123.')
+        ->assertSuccessful();
+
+    Http::assertSent(function ($request): bool {
+        return str_contains($request->url(), 'api.telegram.org/bottelegram-token/getChat')
+            && $request['chat_id'] === '-100123';
     });
 });
 
