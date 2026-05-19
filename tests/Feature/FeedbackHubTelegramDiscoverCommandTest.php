@@ -31,6 +31,16 @@ it('lists telegram chat ids visible to the bot', function (): void {
                 ],
                 [
                     'update_id' => 2,
+                    'my_chat_member' => [
+                        'chat' => [
+                            'id' => -100456,
+                            'type' => 'channel',
+                            'title' => 'Feedback Membership',
+                        ],
+                    ],
+                ],
+                [
+                    'update_id' => 3,
                     'message' => [
                         'chat' => [
                             'id' => 42,
@@ -47,6 +57,7 @@ it('lists telegram chat ids visible to the bot', function (): void {
         ->expectsOutputToContain('Bot: @feedback_bot')
         ->expectsTable(['chat_id', 'type', 'title'], [
             ['-100123', 'channel', 'Feedback Hub'],
+            ['-100456', 'channel', 'Feedback Membership'],
             ['42', 'private', 'Nathan'],
         ])
         ->expectsOutputToContain('Set FEEDBACK_HUB_TELEGRAM_CHAT_ID to the chat_id for the feedback channel.')

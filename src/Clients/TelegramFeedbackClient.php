@@ -85,6 +85,7 @@ class TelegramFeedbackClient
     {
         $response = Http::get($this->endpoint('getUpdates'), [
             'limit' => $limit,
+            'allowed_updates' => json_encode(['message', 'channel_post', 'my_chat_member', 'chat_member']),
         ])->throw();
 
         if (! $response->json('ok')) {

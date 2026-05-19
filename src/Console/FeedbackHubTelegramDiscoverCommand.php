@@ -47,19 +47,21 @@ class FeedbackHubTelegramDiscoverCommand extends Command
         $rows = [];
 
         foreach ($updates as $update) {
-            $message = $update['channel_post'] ?? $update['message'] ?? null;
-            $chat = is_array($message) ? ($message['chat'] ?? null) : null;
+            foreach (['channel_post', 'message', 'my_chat_member', 'chat_member'] as $source) {
+                $payload = $update[$source] ?? null;
+                $chat = is_array($payload) ? ($payload['chat'] ?? null) : null;
 
-            if (! is_array($chat) || ! isset($chat['id'])) {
-                continue;
+                if (! is_array($chat) || ! isset($chat['id'])) {
+                    continue;
+                }
+
+                $chatId = (string) $chat['id'];
+                $rows[$chatId] = [
+                    'chat_id' => $chatId,
+                    'type' => (string) ($chat['type'] ?? ''),
+                    'title' => (string) ($chat['title'] ?? $chat['username'] ?? $chat['first_name'] ?? ''),
+                ];
             }
-
-            $chatId = (string) $chat['id'];
-            $rows[$chatId] = [
-                'chat_id' => $chatId,
-                'type' => (string) ($chat['type'] ?? ''),
-                'title' => (string) ($chat['title'] ?? $chat['username'] ?? $chat['first_name'] ?? ''),
-            ];
         }
 
         return array_values($rows);
