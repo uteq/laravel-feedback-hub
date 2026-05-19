@@ -380,9 +380,15 @@ window.FeedbackHubInspector = {
     },
 };
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeFeedbackHubInspector() {
     window.FeedbackHubInspector.init();
-});
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeFeedbackHubInspector, { once: true });
+} else {
+    initializeFeedbackHubInspector();
+}
 
 document.addEventListener('livewire:navigated', () => {
     window.FeedbackHubInspector.reinit();
