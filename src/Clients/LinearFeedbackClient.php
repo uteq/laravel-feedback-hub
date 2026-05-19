@@ -37,7 +37,9 @@ class LinearFeedbackClient
             $input['labelIds'] = $labelIds;
         }
 
-        $response = Http::withToken((string) config('feedback-hub.linear.token'))
+        $response = Http::withHeaders([
+            'Authorization' => (string) config('feedback-hub.linear.token'),
+        ])
             ->acceptJson()
             ->post('https://api.linear.app/graphql', [
                 'query' => <<<'GRAPHQL'

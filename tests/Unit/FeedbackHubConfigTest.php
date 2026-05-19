@@ -8,7 +8,7 @@ it('uses existing project env names as configuration fallbacks', function (): vo
     foreach ([
         'GITHUB_TOKEN' => 'github-token',
         'GITHUB_REPOSITORY' => 'uteq/example',
-        'LINEAR_TOKEN' => 'linear-token',
+        'LINEAR_API_TOKEN' => 'linear-token',
         'LINEAR_TEAM_ID' => 'team-id',
         'LINEAR_PROJECT_ID' => 'project-id',
         'LINEAR_LABEL_IDS' => 'label-id',

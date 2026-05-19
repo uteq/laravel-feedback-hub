@@ -61,6 +61,8 @@ it('creates github and linear issues before sending telegram', function (): void
         ->and($report->telegram_message_id)->toBe('44');
 
     Http::assertSentCount(3);
+    Http::assertSent(fn ($request): bool => str_contains($request->url(), 'api.linear.app/graphql')
+        && $request->hasHeader('Authorization', 'linear-token'));
 });
 
 it('does not create duplicate external issues on retry', function (): void {

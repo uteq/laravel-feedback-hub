@@ -27,7 +27,7 @@ return [
 
     'linear' => [
         'enabled' => env('FEEDBACK_HUB_LINEAR_ENABLED', true),
-        'token' => env('FEEDBACK_HUB_LINEAR_TOKEN', env('LINEAR_API_KEY', env('LINEAR_TOKEN'))),
+        'token' => env('FEEDBACK_HUB_LINEAR_TOKEN', env('LINEAR_API_KEY', env('LINEAR_API_TOKEN', env('LINEAR_TOKEN')))),
         'team_id' => env('FEEDBACK_HUB_LINEAR_TEAM_ID', env('LINEAR_TEAM_ID')),
         'project_id' => env('FEEDBACK_HUB_LINEAR_PROJECT_ID', env('LINEAR_PROJECT_ID')),
         'label_ids' => env('FEEDBACK_HUB_LINEAR_LABEL_IDS', env('LINEAR_LABEL_IDS', '')),

@@ -132,7 +132,9 @@ class FeedbackHubHealthCommand extends Command
             $projectQuery = ' project(id: $projectId) { id name }';
         }
 
-        $response = Http::withToken((string) config('feedback-hub.linear.token'))
+        $response = Http::withHeaders([
+            'Authorization' => (string) config('feedback-hub.linear.token'),
+        ])
             ->acceptJson()
             ->post('https://api.linear.app/graphql', [
                 'query' => "query FeedbackHubConfig(\$teamId: String!{$projectVariable}) { viewer { id name } team(id: \$teamId) { id name key }{$projectQuery} }",

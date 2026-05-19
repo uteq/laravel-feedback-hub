@@ -58,6 +58,8 @@ it('validates live github linear and telegram configuration', function (): void 
         ->assertSuccessful();
 
     Http::assertSentCount(5);
+    Http::assertSent(fn ($request): bool => str_contains($request->url(), 'api.linear.app/graphql')
+        && $request->hasHeader('Authorization', 'linear-token'));
 });
 
 it('accepts github repo read access when issues are enabled', function (): void {
