@@ -211,19 +211,9 @@ window.FeedbackHubInspector = {
     },
 
     async captureScreenshot() {
-        if (this.highlightOverlay) this.highlightOverlay.style.display = 'none';
-
-        const widget = document.querySelector('[data-feedback-hub-widget]');
-        const banner = document.getElementById('feedback-hub-instruction-banner');
-        if (widget) widget.style.display = 'none';
-        if (banner) banner.style.display = 'none';
-
-        if (this.selectedElement) {
-            this.selectedElement.dataset.feedbackHubOriginalOutline = this.selectedElement.style.outline || '';
-            this.selectedElement.dataset.feedbackHubOriginalOutlineOffset = this.selectedElement.style.outlineOffset || '';
-            this.selectedElement.style.outline = '3px solid #135d66';
-            this.selectedElement.style.outlineOffset = '2px';
-        }
+        let widget = null;
+        let banner = null;
+        let track = null;
 
         try {
             if (navigator.webdriver || !navigator.mediaDevices?.getDisplayMedia || typeof ImageCapture === 'undefined') {
@@ -237,9 +227,25 @@ window.FeedbackHubInspector = {
                 systemAudio: 'exclude',
             });
 
-            const track = stream.getVideoTracks()[0];
+            track = stream.getVideoTracks()[0];
+
+            if (this.highlightOverlay) this.highlightOverlay.style.display = 'none';
+
+            widget = document.querySelector('[data-feedback-hub-widget]');
+            banner = document.getElementById('feedback-hub-instruction-banner');
+            if (widget) widget.style.display = 'none';
+            if (banner) banner.style.display = 'none';
+
+            if (this.selectedElement) {
+                this.selectedElement.dataset.feedbackHubOriginalOutline = this.selectedElement.style.outline || '';
+                this.selectedElement.dataset.feedbackHubOriginalOutlineOffset = this.selectedElement.style.outlineOffset || '';
+                this.selectedElement.style.outline = '3px solid #135d66';
+                this.selectedElement.style.outlineOffset = '2px';
+            }
+
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+
             const bitmap = await new ImageCapture(track).grabFrame();
-            track.stop();
 
             const canvas = document.createElement('canvas');
             canvas.width = bitmap.width;
@@ -251,6 +257,7 @@ window.FeedbackHubInspector = {
             console.warn('Feedback screenshot capture failed:', error.message);
             return null;
         } finally {
+            if (track) track.stop();
             if (widget) widget.style.display = '';
             if (this.selectedElement) {
                 this.selectedElement.style.outline = this.selectedElement.dataset.feedbackHubOriginalOutline || '';
@@ -349,12 +356,11 @@ window.FeedbackHubInspector = {
     },
 
     async captureAndOpen() {
-        const screenshot = await this.captureScreenshot();
         const rect = this.selectedElement?.getBoundingClientRect();
 
         window.dispatchEvent(new CustomEvent('feedback-hub-captured', {
             detail: {
-                screenshot,
+                screenshot: null,
                 elementSelector: this.selectedElement ? this.getSelector(this.selectedElement) : null,
                 elementRect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
                 sessionData: this.collectContext(),
@@ -363,6 +369,14 @@ window.FeedbackHubInspector = {
                 formState: this.collectFormState(),
             },
         }));
+
+        const screenshot = await this.captureScreenshot();
+
+        if (screenshot) {
+            window.dispatchEvent(new CustomEvent('feedback-hub-screenshot-captured', {
+                detail: { screenshot },
+            }));
+        }
     },
 };
 

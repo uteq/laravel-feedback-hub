@@ -16,7 +16,8 @@ it('renders the widget for authenticated users', function (): void {
     $html = $this->actingAs($user)->app['view']->make('feedback-hub::components.floating-button')->render();
 
     expect($html)->toContain('data-feedback-hub-widget')
-        ->and($html)->toContain('feedbackHubWidget');
+        ->and($html)->toContain('feedbackHubWidget')
+        ->and($html)->toContain('x-on:feedback-hub-screenshot-captured.window="handleScreenshot($event.detail)"');
 });
 
 it('redacts sensitive url values before the browser submits feedback', function (): void {

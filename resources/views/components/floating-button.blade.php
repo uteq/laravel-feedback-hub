@@ -63,6 +63,12 @@
                         this.showModal = true;
                     },
 
+                    handleScreenshot(detail) {
+                        if (detail.screenshot) {
+                            this.screenshot = detail.screenshot;
+                        }
+                    },
+
                     close() {
                         this.showModal = false;
                         this.reset();
@@ -189,6 +195,7 @@
     <div
         x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')) })"
         x-on:feedback-hub-captured.window="handleCapture($event.detail)"
+        x-on:feedback-hub-screenshot-captured.window="handleScreenshot($event.detail)"
         data-feedback-hub-widget
     >
         <button type="button" class="fh-button" x-on:click="start" x-show="!showModal" aria-label="Feedback geven">

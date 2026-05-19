@@ -18,5 +18,7 @@ it('publishes config migration and inspector asset', function (): void {
         ->and($migrationPath)->toBeFile()
         ->and(file_get_contents($assetPath))
         ->toContain("document.addEventListener('click', this.boundHandleDocumentClick, true)")
-        ->toContain('pointer-events:none');
+        ->toContain('pointer-events:none')
+        ->toContain("window.dispatchEvent(new CustomEvent('feedback-hub-captured'")
+        ->toContain("window.dispatchEvent(new CustomEvent('feedback-hub-screenshot-captured'");
 });
