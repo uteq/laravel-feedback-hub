@@ -7,6 +7,7 @@ use Uteq\FeedbackHub\Console\FeedbackHubHealthCommand;
 use Uteq\FeedbackHub\Console\FeedbackHubInstallCommand;
 use Uteq\FeedbackHub\Console\FeedbackHubTelegramDiscoverCommand;
 use Uteq\FeedbackHub\Console\FeedbackHubTelegramTestCommand;
+use Uteq\FeedbackHub\Console\FeedbackHubTestDeliveryCommand;
 
 class FeedbackHubServiceProvider extends ServiceProvider
 {
@@ -39,6 +40,7 @@ class FeedbackHubServiceProvider extends ServiceProvider
                 FeedbackHubInstallCommand::class,
                 FeedbackHubTelegramDiscoverCommand::class,
                 FeedbackHubTelegramTestCommand::class,
+                FeedbackHubTestDeliveryCommand::class,
             ]);
         }
     }

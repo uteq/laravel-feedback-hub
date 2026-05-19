@@ -74,6 +74,8 @@ For admin routes, publish the config and set middleware:
 ```bash
 php artisan feedback-hub:health
 php artisan feedback-hub:health --live
+php artisan feedback-hub:test-delivery
+php artisan feedback-hub:test-delivery --send
 php artisan feedback-hub:telegram-discover
 php artisan feedback-hub:telegram-test "Feedback Hub test"
 ```
