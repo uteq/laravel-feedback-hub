@@ -214,27 +214,30 @@ window.FeedbackHubInspector = {
         let widget = null;
         let banner = null;
         let track = null;
+        let stream = null;
+        let video = null;
+        let originalWidgetVisibility = null;
+        let originalBannerDisplay = null;
 
         try {
-            if (navigator.webdriver || !navigator.mediaDevices?.getDisplayMedia || typeof ImageCapture === 'undefined') {
-                return null;
+            if (!navigator.mediaDevices?.getDisplayMedia) {
+                return this.createPlaceholderScreenshot();
             }
-
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { displaySurface: 'browser' },
-                preferCurrentTab: true,
-                selfBrowserSurface: 'include',
-                systemAudio: 'exclude',
-            });
-
-            track = stream.getVideoTracks()[0];
 
             if (this.highlightOverlay) this.highlightOverlay.style.display = 'none';
 
             widget = document.querySelector('[data-feedback-hub-widget]');
             banner = document.getElementById('feedback-hub-instruction-banner');
-            if (widget) widget.style.display = 'none';
-            if (banner) banner.style.display = 'none';
+
+            if (widget) {
+                originalWidgetVisibility = widget.style.visibility || '';
+                widget.style.visibility = 'hidden';
+            }
+
+            if (banner) {
+                originalBannerDisplay = banner.style.display || '';
+                banner.style.display = 'none';
+            }
 
             if (this.selectedElement) {
                 this.selectedElement.dataset.feedbackHubOriginalOutline = this.selectedElement.style.outline || '';
@@ -245,20 +248,51 @@ window.FeedbackHubInspector = {
 
             await new Promise((resolve) => requestAnimationFrame(resolve));
 
-            const bitmap = await new ImageCapture(track).grabFrame();
+            stream = await navigator.mediaDevices.getDisplayMedia({
+                video: { displaySurface: 'browser' },
+                preferCurrentTab: true,
+                selfBrowserSurface: 'include',
+                systemAudio: 'exclude',
+            });
+
+            track = stream.getVideoTracks()[0];
+            video = document.createElement('video');
+            video.muted = true;
+            video.playsInline = true;
+            video.srcObject = stream;
+            video.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none';
+            document.body.appendChild(video);
+
+            await new Promise((resolve, reject) => {
+                video.onloadedmetadata = resolve;
+                video.onerror = () => reject(new Error('Screenshot video stream kon niet worden geladen.'));
+            });
+            await video.play();
+            await new Promise((resolve) => requestAnimationFrame(resolve));
 
             const canvas = document.createElement('canvas');
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            canvas.getContext('2d').drawImage(bitmap, 0, 0);
+            const settings = track?.getSettings?.() || {};
+            canvas.width = video.videoWidth || settings.width || window.innerWidth;
+            canvas.height = video.videoHeight || settings.height || window.innerHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
             return canvas.toDataURL('image/png');
         } catch (error) {
             console.warn('Feedback screenshot capture failed:', error.message);
-            return null;
+            if (['AbortError', 'NotAllowedError'].includes(error.name)) {
+                return null;
+            }
+
+            return this.createPlaceholderScreenshot();
         } finally {
             if (track) track.stop();
-            if (widget) widget.style.display = '';
+            if (stream) stream.getTracks().forEach((streamTrack) => streamTrack.stop());
+            if (video) {
+                video.srcObject = null;
+                video.remove();
+            }
+            if (widget) widget.style.visibility = originalWidgetVisibility || '';
+            if (banner) banner.style.display = originalBannerDisplay || '';
             if (this.selectedElement) {
                 this.selectedElement.style.outline = this.selectedElement.dataset.feedbackHubOriginalOutline || '';
                 this.selectedElement.style.outlineOffset = this.selectedElement.dataset.feedbackHubOriginalOutlineOffset || '';
@@ -266,6 +300,36 @@ window.FeedbackHubInspector = {
                 delete this.selectedElement.dataset.feedbackHubOriginalOutlineOffset;
             }
         }
+    },
+
+    createPlaceholderScreenshot() {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = Math.min(window.innerWidth, 1200);
+        canvas.height = Math.min(window.innerHeight, 800);
+
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        context.strokeStyle = '#e2e8f0';
+        context.lineWidth = 2;
+        context.strokeRect(1, 1, canvas.width - 2, canvas.height - 2);
+
+        context.fillStyle = '#cbd5e1';
+        context.beginPath();
+        context.arc(canvas.width / 2, canvas.height / 2 - 42, 40, 0, 2 * Math.PI);
+        context.fill();
+
+        context.fillStyle = '#475569';
+        context.font = '18px system-ui, -apple-system, sans-serif';
+        context.textAlign = 'center';
+        context.fillText('Screenshot niet beschikbaar', canvas.width / 2, canvas.height / 2 + 28);
+
+        context.font = '14px system-ui, -apple-system, sans-serif';
+        context.fillStyle = '#64748b';
+        context.fillText('Pagina-context is wel vastgelegd', canvas.width / 2, canvas.height / 2 + 54);
+
+        return canvas.toDataURL('image/png');
     },
 
     setupConsoleCapture() {
@@ -357,10 +421,11 @@ window.FeedbackHubInspector = {
 
     async captureAndOpen() {
         const rect = this.selectedElement?.getBoundingClientRect();
+        const screenshot = await this.captureScreenshot();
 
         window.dispatchEvent(new CustomEvent('feedback-hub-captured', {
             detail: {
-                screenshot: null,
+                screenshot,
                 elementSelector: this.selectedElement ? this.getSelector(this.selectedElement) : null,
                 elementRect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
                 sessionData: this.collectContext(),
@@ -369,8 +434,6 @@ window.FeedbackHubInspector = {
                 formState: this.collectFormState(),
             },
         }));
-
-        const screenshot = await this.captureScreenshot();
 
         if (screenshot) {
             window.dispatchEvent(new CustomEvent('feedback-hub-screenshot-captured', {

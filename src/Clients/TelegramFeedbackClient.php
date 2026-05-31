@@ -19,18 +19,67 @@ class TelegramFeedbackClient
     }
 
     /**
+     * @param  array<int, array{text: string, url: string}>  $buttons
      * @return array{message_id: string}
      *
      * @throws RequestException
      */
-    public function sendMessage(string $text): array
+    public function sendMessage(string $text, ?string $parseMode = null, array $buttons = []): array
     {
+        $payload = [
+            'chat_id' => (string) config('feedback-hub.telegram.chat_id'),
+            'text' => $text,
+            'disable_web_page_preview' => true,
+        ];
+
+        if ($parseMode) {
+            $payload['parse_mode'] = $parseMode;
+        }
+
+        if ($buttons !== []) {
+            $payload['reply_markup'] = json_encode([
+                'inline_keyboard' => [$buttons],
+            ], JSON_UNESCAPED_SLASHES);
+        }
+
         $response = Http::asForm()
-            ->post($this->endpoint('sendMessage'), [
-                'chat_id' => (string) config('feedback-hub.telegram.chat_id'),
-                'text' => $text,
-                'disable_web_page_preview' => true,
-            ])
+            ->post($this->endpoint('sendMessage'), $payload)
+            ->throw();
+
+        if (! $response->json('ok')) {
+            throw new RequestException($response);
+        }
+
+        return [
+            'message_id' => (string) $response->json('result.message_id'),
+        ];
+    }
+
+    /**
+     * @param  array<int, array{text: string, url: string}>  $buttons
+     * @return array{message_id: string}
+     *
+     * @throws RequestException
+     */
+    public function sendPhoto(string $contents, string $filename, string $caption, ?string $parseMode = null, array $buttons = []): array
+    {
+        $payload = [
+            'chat_id' => (string) config('feedback-hub.telegram.chat_id'),
+            'caption' => $caption,
+        ];
+
+        if ($parseMode) {
+            $payload['parse_mode'] = $parseMode;
+        }
+
+        if ($buttons !== []) {
+            $payload['reply_markup'] = json_encode([
+                'inline_keyboard' => [$buttons],
+            ], JSON_UNESCAPED_SLASHES);
+        }
+
+        $response = Http::attach('photo', $contents, $filename)
+            ->post($this->endpoint('sendPhoto'), $payload)
             ->throw();
 
         if (! $response->json('ok')) {

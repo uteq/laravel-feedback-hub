@@ -4,11 +4,11 @@
             [x-cloak] { display: none !important; }
             .fh-button { position: fixed; right: 24px; bottom: 24px; z-index: 50; display: inline-flex; width: 56px; height: 56px; align-items: center; justify-content: center; border: 0; border-radius: 999px; background: #135d66; color: white; box-shadow: 0 16px 34px rgba(19, 93, 102, .26); cursor: pointer; transition: transform .16s ease, background .16s ease, box-shadow .16s ease; }
             .fh-button:hover { transform: translateY(-1px) scale(1.03); background: #0f4d55; box-shadow: 0 18px 40px rgba(19, 93, 102, .32); }
-            .fh-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15, 23, 42, .52); }
-            .fh-modal { width: min(100%, 680px); max-height: min(760px, 92vh); overflow: hidden; border: 1px solid rgba(15, 23, 42, .12); border-radius: 8px; background: white; color: #172026; box-shadow: 0 28px 80px rgba(15, 23, 42, .28); }
+            .fh-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 20px; background: rgba(15, 23, 42, .52); }
+            .fh-modal { display: flex; flex-direction: column; width: min(100%, 680px); max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px); overflow: hidden; border: 1px solid rgba(15, 23, 42, .12); border-radius: 8px; background: white; color: #172026; box-shadow: 0 28px 80px rgba(15, 23, 42, .28); }
             .fh-header, .fh-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid #e7eaee; }
             .fh-footer { justify-content: flex-end; border-top: 1px solid #e7eaee; border-bottom: 0; }
-            .fh-body { max-height: calc(92vh - 132px); overflow: auto; padding: 18px; }
+            .fh-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 18px; }
             .fh-title { margin: 0; font-size: 18px; line-height: 1.3; font-weight: 750; }
             .fh-label { display: block; margin-bottom: 7px; color: #334155; font-size: 13px; font-weight: 650; }
             .fh-field { margin-bottom: 16px; }

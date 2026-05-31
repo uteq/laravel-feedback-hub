@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 use Uteq\FeedbackHub\Clients\GitHubFeedbackClient;
 use Uteq\FeedbackHub\Clients\LinearFeedbackClient;
@@ -93,7 +94,9 @@ class ProcessFeedbackReportJob implements ShouldBeUnique, ShouldQueue
                     return;
                 }
 
-                $result = $telegram->sendMessage($bodyBuilder->telegramMessage($this->report->refresh()));
+                $this->report->refresh();
+
+                $result = $this->sendTelegramNotification($telegram, $bodyBuilder);
                 $this->report->forceFill([
                     'telegram_message_id' => $result['message_id'],
                     'telegram_sent_at' => now(),
@@ -119,6 +122,31 @@ class ProcessFeedbackReportJob implements ShouldBeUnique, ShouldQueue
     private function integrationEnabled(string $key): bool
     {
         return (bool) config("feedback-hub.{$key}.enabled");
+    }
+
+    /**
+     * @return array{message_id: string}
+     */
+    private function sendTelegramNotification(TelegramFeedbackClient $telegram, IssueBodyBuilder $bodyBuilder): array
+    {
+        $message = $bodyBuilder->telegramMessage($this->report);
+        $buttons = $bodyBuilder->telegramButtons($this->report);
+
+        if ($this->report->screenshot_disk && $this->report->screenshot_path) {
+            $disk = Storage::disk((string) $this->report->screenshot_disk);
+
+            if ($disk->exists((string) $this->report->screenshot_path)) {
+                return $telegram->sendPhoto(
+                    $disk->get((string) $this->report->screenshot_path),
+                    basename((string) $this->report->screenshot_path),
+                    $message,
+                    'HTML',
+                    $buttons,
+                );
+            }
+        }
+
+        return $telegram->sendMessage($message, 'HTML', $buttons);
     }
 
     private function markFailed(string $message): void

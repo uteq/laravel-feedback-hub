@@ -2,6 +2,7 @@
 
 namespace Uteq\FeedbackHub\Support;
 
+use Illuminate\Support\Str;
 use Uteq\FeedbackHub\Models\FeedbackReport;
 
 class IssueBodyBuilder
@@ -50,20 +51,61 @@ class IssueBodyBuilder
 
     public function telegramMessage(FeedbackReport $report): string
     {
-        $links = array_filter([
-            $report->github_issue_url ? "GitHub: {$report->github_issue_url}" : null,
-            $report->linear_issue_url ? "Linear: {$report->linear_issue_url}" : null,
-            "Admin: {$report->adminUrl()}",
-        ]);
+        $lines = [
+            '<b>Nieuwe feedback</b>',
+            $this->html($this->redact((string) $report->project)),
+            '',
+            '<b>'.$this->html((string) $report->reference).'</b> '.$this->html($this->summary((string) $report->title, 140)),
+            $this->html($this->typeLabel((string) $report->type).' van '.$this->reporter($report)),
+            'Pagina: '.$this->html($this->pageLabel((string) $report->page_url)),
+        ];
 
-        return implode("\n", array_filter([
-            'Nieuwe feedback voor '.$this->redact((string) $report->project),
-            "{$report->reference}: ".$this->redact((string) $report->title),
-            "Type: {$report->type}",
-            'Melder: '.$this->reporter($report),
-            'URL: '.$this->redact((string) $report->page_url),
-            implode("\n", $links),
+        if ($report->description) {
+            $lines[] = 'Omschrijving: '.$this->html($this->summary((string) $report->description, 220));
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @return array<int, array{text: string, url: string}>
+     */
+    public function telegramButtons(FeedbackReport $report): array
+    {
+        return array_values(array_filter([
+            $this->button($report->github_issue_url ? ($report->github_issue_number ? "GitHub #{$report->github_issue_number}" : 'GitHub') : null, $report->github_issue_url),
+            $this->button($report->linear_issue_identifier ?: 'Linear', $report->linear_issue_url),
+            $this->button('Admin', $report->adminUrl()),
         ]));
+    }
+
+    /**
+     * @return array{text: string, url: string}|null
+     */
+    private function button(?string $text, ?string $url): ?array
+    {
+        if (! $text || ! $url || ! $this->isTelegramButtonUrl($url)) {
+            return null;
+        }
+
+        return [
+            'text' => $text,
+            'url' => $url,
+        ];
+    }
+
+    private function isTelegramButtonUrl(string $url): bool
+    {
+        $parts = parse_url($url);
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
+
+        if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return false;
+        }
+
+        return ! in_array($host, ['localhost', '127.0.0.1', '::1'], true)
+            && ! str_ends_with($host, '.localhost');
     }
 
     private function reporter(FeedbackReport $report): string
@@ -78,6 +120,34 @@ class IssueBodyBuilder
     private function redact(string $value): string
     {
         return $this->sanitizer->redactString($value);
+    }
+
+    private function html(string $value): string
+    {
+        return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    private function summary(string $value, int $limit): string
+    {
+        return Str::limit(Str::squish($this->redact($value)), $limit);
+    }
+
+    private function pageLabel(string $url): string
+    {
+        $path = parse_url($url, PHP_URL_PATH) ?: $url;
+        $path = preg_replace('/\/[0-9a-f]{8}-[0-9a-f-]{20,}(?=\/|$)/i', '/...', $path) ?: $path;
+
+        return Str::limit($path, 90);
+    }
+
+    private function typeLabel(string $type): string
+    {
+        return match ($type) {
+            'bug' => 'Bug',
+            'suggestion' => 'Suggestie',
+            'question' => 'Vraag',
+            default => $type,
+        };
     }
 
     /**

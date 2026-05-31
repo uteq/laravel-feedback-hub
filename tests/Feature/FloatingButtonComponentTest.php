@@ -17,6 +17,8 @@ it('renders the widget for authenticated users', function (): void {
 
     expect($html)->toContain('data-feedback-hub-widget')
         ->and($html)->toContain('feedbackHubWidget')
+        ->and($html)->toContain('.fh-modal { display: flex; flex-direction: column;')
+        ->and($html)->toContain('.fh-body { flex: 1 1 auto; min-height: 0; overflow-y: auto;')
         ->and($html)->toContain('x-on:feedback-hub-screenshot-captured.window="handleScreenshot($event.detail)"');
 });
 
