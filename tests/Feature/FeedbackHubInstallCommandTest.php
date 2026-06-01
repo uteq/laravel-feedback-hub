@@ -13,10 +13,12 @@ it('publishes config migration and inspector asset', function (): void {
         ->expectsOutputToContain('Feedback Hub files published.')
         ->assertSuccessful();
 
+    $asset = file_get_contents($assetPath);
+
     expect($configPath)->toBeFile()
         ->and($assetPath)->toBeFile()
         ->and($migrationPath)->toBeFile()
-        ->and(file_get_contents($assetPath))
+        ->and($asset)
         ->toContain("document.addEventListener('click', this.boundHandleDocumentClick, true)")
         ->toContain('pointer-events:none')
         ->toContain('navigator.mediaDevices?.getDisplayMedia')
@@ -29,4 +31,7 @@ it('publishes config migration and inspector asset', function (): void {
         ->toContain('initializeFeedbackHubInspector();')
         ->toContain("window.dispatchEvent(new CustomEvent('feedback-hub-captured'")
         ->toContain("window.dispatchEvent(new CustomEvent('feedback-hub-screenshot-captured'");
+
+    expect(strpos($asset, 'stream = await navigator.mediaDevices.getDisplayMedia'))
+        ->toBeLessThan(strpos($asset, 'await new Promise((resolve) => requestAnimationFrame(resolve));'));
 });

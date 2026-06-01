@@ -246,8 +246,8 @@ window.FeedbackHubInspector = {
                 this.selectedElement.style.outlineOffset = '2px';
             }
 
-            await new Promise((resolve) => requestAnimationFrame(resolve));
-
+            // Keep this call in the original click activation window. Awaiting before
+            // getDisplayMedia can make Chromium reject the capture request.
             stream = await navigator.mediaDevices.getDisplayMedia({
                 video: { displaySurface: 'browser' },
                 preferCurrentTab: true,
