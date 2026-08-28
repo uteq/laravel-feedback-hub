@@ -1,7 +1,9 @@
 <?php
 
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Uteq\FeedbackHub\Clients\GitHubFeedbackClient;
 use Uteq\FeedbackHub\Clients\LinearFeedbackClient;
@@ -341,4 +343,104 @@ it('uses one unique queue lock per report', function (): void {
 
     expect($job->uniqueId())->toBe('feedback-hub-report:'.$report->getKey())
         ->and($job->uniqueFor)->toBe(3600);
+});
+
+it('syncs and warns when telegram is enabled without a token', function (): void {
+    config()->set('feedback-hub.github.token', 'github-token');
+    config()->set('feedback-hub.github.repo', 'uteq/example');
+    config()->set('feedback-hub.linear.enabled', false);
+    config()->set('feedback-hub.telegram.enabled', true);
+    config()->set('feedback-hub.telegram.bot_token', null);
+    config()->set('feedback-hub.telegram.chat_id', null);
+
+    Http::fake([
+        'api.github.com/repos/uteq/example/issues' => Http::response([
+            'html_url' => 'https://github.com/uteq/example/issues/12',
+            'number' => 12,
+        ], 201),
+    ]);
+
+    Log::shouldReceive('warning')->once()->withArgs(
+        fn (string $message): bool => str_contains($message, 'telegram_not_configured')
+    );
+
+    $report = FeedbackReport::query()->create([
+        'project' => 'Test Project',
+        'type' => 'bug',
+        'title' => 'Bug report',
+        'page_url' => 'https://example.test/dashboard',
+    ]);
+
+    app(ProcessFeedbackReportJob::class, ['report' => $report])->handle(
+        app(GitHubFeedbackClient::class),
+        app(LinearFeedbackClient::class),
+        app(TelegramFeedbackClient::class),
+        app(IssueBodyBuilder::class),
+    );
+
+    $report->refresh();
+
+    expect($report->status)->toBe('synced')
+        ->and($report->last_error)->toBeNull()
+        ->and($report->github_issue_number)->toBe(12)
+        ->and($report->telegram_message_id)->toBeNull();
+});
+
+it('still fails on a real telegram api error', function (): void {
+    config()->set('feedback-hub.github.enabled', false);
+    config()->set('feedback-hub.linear.enabled', false);
+    config()->set('feedback-hub.telegram.bot_token', 'telegram-token');
+    config()->set('feedback-hub.telegram.chat_id', '-100123');
+
+    Http::fake([
+        'api.telegram.org/bottelegram-token/sendMessage' => Http::response([
+            'ok' => false,
+            'description' => 'Unauthorized',
+        ], 401),
+    ]);
+
+    $report = FeedbackReport::query()->create([
+        'project' => 'Test Project',
+        'type' => 'bug',
+        'title' => 'Bug report',
+        'page_url' => 'https://example.test/dashboard',
+    ]);
+
+    expect(fn () => app(ProcessFeedbackReportJob::class, ['report' => $report])->handle(
+        app(GitHubFeedbackClient::class),
+        app(LinearFeedbackClient::class),
+        app(TelegramFeedbackClient::class),
+        app(IssueBodyBuilder::class),
+    ))->toThrow(RequestException::class);
+
+    expect($report->refresh()->status)->toBe('failed')
+        ->and($report->last_error)->not->toBeNull();
+});
+
+it('keeps failing the report when github is not configured', function (): void {
+    config()->set('feedback-hub.github.enabled', true);
+    config()->set('feedback-hub.github.token', null);
+    config()->set('feedback-hub.linear.enabled', false);
+    config()->set('feedback-hub.telegram.enabled', false);
+
+    Http::fake();
+
+    $report = FeedbackReport::query()->create([
+        'project' => 'Test Project',
+        'type' => 'bug',
+        'title' => 'Bug report',
+        'page_url' => 'https://example.test/dashboard',
+    ]);
+
+    app(ProcessFeedbackReportJob::class, ['report' => $report])->handle(
+        app(GitHubFeedbackClient::class),
+        app(LinearFeedbackClient::class),
+        app(TelegramFeedbackClient::class),
+        app(IssueBodyBuilder::class),
+    );
+
+    expect($report->refresh()->status)->toBe('failed')
+        ->and($report->last_error)->toBe('github_not_configured');
+
+    Http::assertNothingSent();
 });
