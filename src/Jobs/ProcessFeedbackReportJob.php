@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 use Uteq\FeedbackHub\Clients\GitHubFeedbackClient;
@@ -89,18 +90,18 @@ class ProcessFeedbackReportJob implements ShouldBeUnique, ShouldQueue
 
             if ($this->integrationEnabled('telegram') && ! $this->report->telegram_message_id) {
                 if (! $telegram->isConfigured()) {
-                    $this->markFailed('telegram_not_configured');
+                    // Een ontbrekende configuratie is een keuze van de beheerder, geen storing:
+                    // het rapport blijft geslaagd en alleen de telegram-stap wordt overgeslagen.
+                    Log::warning('telegram_not_configured', ['report' => $this->report->getKey()]);
+                } else {
+                    $this->report->refresh();
 
-                    return;
+                    $result = $this->sendTelegramNotification($telegram, $bodyBuilder);
+                    $this->report->forceFill([
+                        'telegram_message_id' => $result['message_id'],
+                        'telegram_sent_at' => now(),
+                    ])->save();
                 }
-
-                $this->report->refresh();
-
-                $result = $this->sendTelegramNotification($telegram, $bodyBuilder);
-                $this->report->forceFill([
-                    'telegram_message_id' => $result['message_id'],
-                    'telegram_sent_at' => now(),
-                ])->save();
             }
 
             $this->report->forceFill([
