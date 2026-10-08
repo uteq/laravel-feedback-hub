@@ -10,12 +10,12 @@ class TelegramFeedbackClient
     public function isConfigured(): bool
     {
         return $this->hasBotToken()
-            && filled(config('feedback-hub.telegram.chat_id'));
+            && filled($this->chatId());
     }
 
     public function hasBotToken(): bool
     {
-        return filled(config('feedback-hub.telegram.bot_token'));
+        return filled($this->botToken());
     }
 
     /**
@@ -27,7 +27,7 @@ class TelegramFeedbackClient
     public function sendMessage(string $text, ?string $parseMode = null, array $buttons = []): array
     {
         $payload = [
-            'chat_id' => (string) config('feedback-hub.telegram.chat_id'),
+            'chat_id' => $this->chatId(),
             'text' => $text,
             'disable_web_page_preview' => true,
         ];
@@ -64,7 +64,7 @@ class TelegramFeedbackClient
     public function sendPhoto(string $contents, string $filename, string $caption, ?string $parseMode = null, array $buttons = []): array
     {
         $payload = [
-            'chat_id' => (string) config('feedback-hub.telegram.chat_id'),
+            'chat_id' => $this->chatId(),
             'caption' => $caption,
         ];
 
@@ -113,7 +113,7 @@ class TelegramFeedbackClient
      */
     public function getChat(): array
     {
-        return $this->resolveChat((string) config('feedback-hub.telegram.chat_id'));
+        return $this->resolveChat($this->chatId());
     }
 
     /**
@@ -154,8 +154,18 @@ class TelegramFeedbackClient
         return $response->json('result', []);
     }
 
+    protected function botToken(): string
+    {
+        return (string) config('feedback-hub.telegram.bot_token');
+    }
+
+    protected function chatId(): string
+    {
+        return (string) config('feedback-hub.telegram.chat_id');
+    }
+
     private function endpoint(string $method): string
     {
-        return 'https://api.telegram.org/bot'.config('feedback-hub.telegram.bot_token').'/'.$method;
+        return 'https://api.telegram.org/bot'.$this->botToken().'/'.$method;
     }
 }

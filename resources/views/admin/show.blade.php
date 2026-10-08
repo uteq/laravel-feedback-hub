@@ -33,6 +33,8 @@
                 <p class="muted">Geen beschrijving.</p>
             @endif
 
+            @includeWhen(config('feedback-hub.view_slots.admin_detail'), config('feedback-hub.view_slots.admin_detail'), ['report' => $report])
+
             @if($report->screenshot_path)
                 <h2>Screenshot</h2>
                 <img src="{{ route('feedback-hub.screenshot', $report) }}" alt="Feedback screenshot">

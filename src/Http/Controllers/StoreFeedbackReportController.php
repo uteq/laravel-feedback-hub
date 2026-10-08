@@ -17,24 +17,12 @@ class StoreFeedbackReportController extends Controller
     {
         abort_unless((bool) config('feedback-hub.enabled'), 404);
 
-        $validated = $request->validate([
-            'type' => ['required', Rule::in(['bug', 'suggestion', 'question'])],
-            'title' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string', 'max:5000'],
-            'url' => ['required', 'url', 'max:2048'],
-            'element_selector' => ['nullable', 'string', 'max:500'],
-            'element_rect' => ['nullable', 'array'],
-            'screenshot' => ['nullable', 'string'],
-            'session_data' => ['nullable', 'array'],
-            'console_errors' => ['nullable', 'array'],
-            'network_requests' => ['nullable', 'array'],
-            'form_state' => ['nullable', 'array'],
-        ]);
+        $validated = $request->validate($this->validationRules());
 
         $user = $request->user();
         $screenshot = $this->storeScreenshot($validated['screenshot'] ?? null);
 
-        $report = FeedbackReport::query()->create([
+        $report = ($this->reportModel())::query()->create(array_merge([
             'project' => (string) config('feedback-hub.project'),
             'type' => $validated['type'],
             'title' => $sanitizer->redactString($validated['title']),
@@ -54,15 +42,54 @@ class StoreFeedbackReportController extends Controller
             'reporter_id' => $user?->getKey(),
             'reporter_name' => $user?->name,
             'reporter_email' => $user?->email,
-        ]);
+        ], $this->additionalAttributes($validated, $sanitizer)));
 
-        ProcessFeedbackReportJob::dispatch($report)->onQueue((string) config('feedback-hub.queue'));
+        ($this->processJob())::dispatch($report)->onQueue((string) config('feedback-hub.queue'));
 
         return response()->json([
             'success' => true,
             'reference' => $report->reference,
             'id' => $report->uuid,
         ], 201);
+    }
+
+    /** @return array<string, mixed> */
+    protected function validationRules(): array
+    {
+        return [
+            'type' => ['required', Rule::in(['bug', 'suggestion', 'question'])],
+            'title' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'url' => ['required', 'url', 'max:2048'],
+            'element_selector' => ['nullable', 'string', 'max:500'],
+            'element_rect' => ['nullable', 'array'],
+            'screenshot' => ['nullable', 'string'],
+            'session_data' => ['nullable', 'array'],
+            'console_errors' => ['nullable', 'array'],
+            'network_requests' => ['nullable', 'array'],
+            'form_state' => ['nullable', 'array'],
+        ];
+    }
+
+    /** @return class-string<FeedbackReport> */
+    protected function reportModel(): string
+    {
+        return FeedbackReport::class;
+    }
+
+    /** @return class-string */
+    protected function processJob(): string
+    {
+        return ProcessFeedbackReportJob::class;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    protected function additionalAttributes(array $validated, FeedbackPayloadSanitizer $sanitizer): array
+    {
+        return [];
     }
 
     /**

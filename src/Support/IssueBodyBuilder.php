@@ -31,6 +31,8 @@ class IssueBodyBuilder
             $lines[] = '';
         }
 
+        $this->appendIssueContext($lines, $report);
+
         if ($report->element_selector) {
             $lines[] = '**Element:** `'.$this->redact((string) $report->element_selector).'`';
             $lines[] = '';
@@ -64,8 +66,16 @@ class IssueBodyBuilder
             $lines[] = 'Omschrijving: '.$this->html($this->summary((string) $report->description, 220));
         }
 
+        $this->appendTelegramContext($lines, $report);
+
         return implode("\n", $lines);
     }
+
+    /** @param list<string> $lines */
+    protected function appendIssueContext(array &$lines, FeedbackReport $report): void {}
+
+    /** @param list<string> $lines */
+    protected function appendTelegramContext(array &$lines, FeedbackReport $report): void {}
 
     /**
      * @return array<int, array{text: string, url: string}>
@@ -117,17 +127,17 @@ class IssueBodyBuilder
         return $report->reporter_name ?: $report->reporter_email ?: 'Unknown';
     }
 
-    private function redact(string $value): string
+    protected function redact(string $value): string
     {
         return $this->sanitizer->redactString($value);
     }
 
-    private function html(string $value): string
+    protected function html(string $value): string
     {
         return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
-    private function summary(string $value, int $limit): string
+    protected function summary(string $value, int $limit): string
     {
         return Str::limit(Str::squish($this->redact($value)), $limit);
     }
