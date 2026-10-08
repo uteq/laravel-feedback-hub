@@ -20,6 +20,8 @@ class FeedbackReport extends Model
             'console_errors' => 'array',
             'network_requests' => 'array',
             'form_state' => 'array',
+            'intent' => 'array',
+            'transcript' => 'array',
             'github_issue_number' => 'integer',
             'github_synced_at' => 'datetime',
             'linear_synced_at' => 'datetime',

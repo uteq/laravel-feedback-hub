@@ -27,6 +27,10 @@ class FeedbackHubInstallCommand extends Command
             '--force' => false,
         ]);
 
+        foreach (config('feedback-hub.additional_install_tags', []) as $tag) {
+            $this->call('vendor:publish', ['--tag' => $tag, '--force' => false]);
+        }
+
         $this->components->info('Feedback Hub files published.');
         $this->line('Add this to your Vite app entry:');
         $this->line("import './vendor/feedback-hub/feedback-inspector';");

@@ -10,7 +10,7 @@ Route::prefix(config('feedback-hub.route_prefix', 'feedback-hub'))
     ->name('feedback-hub.')
     ->middleware(config('feedback-hub.route_middleware', ['web', 'auth']))
     ->group(function (): void {
-        Route::post('/', StoreFeedbackReportController::class)->name('store');
+        Route::post('/', config('feedback-hub.store_controller', StoreFeedbackReportController::class))->name('store');
     });
 
 Route::prefix(config('feedback-hub.route_prefix', 'feedback-hub'))
