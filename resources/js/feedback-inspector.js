@@ -268,6 +268,9 @@ window.FeedbackHubInspector = {
                 video.onerror = () => reject(new Error('Screenshot video stream kon niet worden geladen.'));
             });
             await video.play();
+            // The first frames can still show the OS share picker (a tinted page with its
+            // share bar on top). ponytail: fixed wait; compare frames if it ever shows up again.
+            await new Promise((resolve) => setTimeout(resolve, 500));
             await new Promise((resolve) => requestAnimationFrame(resolve));
 
             const canvas = document.createElement('canvas');

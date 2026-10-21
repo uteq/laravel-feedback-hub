@@ -34,4 +34,10 @@ it('publishes config migration and inspector asset', function (): void {
 
     expect(strpos($asset, 'stream = await navigator.mediaDevices.getDisplayMedia'))
         ->toBeLessThan(strpos($asset, 'await new Promise((resolve) => requestAnimationFrame(resolve));'));
+
+    // Wait for the share picker to fade before grabbing the frame.
+    expect(strpos($asset, 'await video.play()'))
+        ->toBeLessThan(strpos($asset, 'setTimeout(resolve, 500)'))
+        ->and(strpos($asset, 'setTimeout(resolve, 500)'))
+        ->toBeLessThan(strpos($asset, "canvas.getContext('2d').drawImage(video"));
 });
