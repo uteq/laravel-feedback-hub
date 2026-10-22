@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
@@ -443,4 +444,39 @@ it('keeps failing the report when github is not configured', function (): void {
         ->and($report->last_error)->toBe('github_not_configured');
 
     Http::assertNothingSent();
+});
+
+it('does not store the telegram bot token from a connection error', function (): void {
+    config([
+        'feedback-hub.github.enabled' => false,
+        'feedback-hub.linear.enabled' => false,
+        'feedback-hub.telegram.enabled' => true,
+        'feedback-hub.telegram.bot_token' => '123456:ABC-secret_token',
+        'feedback-hub.telegram.chat_id' => '42',
+    ]);
+
+    Http::fake(fn () => throw new ConnectionException(
+        'cURL error 28: timed out for https://api.telegram.org/bot123456:ABC-secret_token/sendMessage',
+    ));
+
+    $report = FeedbackReport::query()->create([
+        'project' => 'Test Project',
+        'type' => 'bug',
+        'title' => 'Bug report',
+        'page_url' => 'https://example.test/dashboard',
+    ]);
+
+    try {
+        app(ProcessFeedbackReportJob::class, ['report' => $report])->handle(
+            app(GitHubFeedbackClient::class),
+            app(LinearFeedbackClient::class),
+            app(TelegramFeedbackClient::class),
+            app(IssueBodyBuilder::class),
+        );
+    } catch (ConnectionException) {
+    }
+
+    expect($report->refresh()->last_error)
+        ->toContain('/bot[filtered]/sendMessage')
+        ->not->toContain('ABC-secret_token');
 });

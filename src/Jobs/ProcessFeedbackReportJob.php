@@ -15,6 +15,7 @@ use Uteq\FeedbackHub\Clients\GitHubFeedbackClient;
 use Uteq\FeedbackHub\Clients\LinearFeedbackClient;
 use Uteq\FeedbackHub\Clients\TelegramFeedbackClient;
 use Uteq\FeedbackHub\Models\FeedbackReport;
+use Uteq\FeedbackHub\Support\FeedbackPayloadSanitizer;
 use Uteq\FeedbackHub\Support\IssueBodyBuilder;
 
 class ProcessFeedbackReportJob implements ShouldBeUnique, ShouldQueue
@@ -154,7 +155,7 @@ class ProcessFeedbackReportJob implements ShouldBeUnique, ShouldQueue
     {
         $this->report->refresh()->forceFill([
             'status' => 'failed',
-            'last_error' => mb_substr($message, 0, 5000),
+            'last_error' => mb_substr(app(FeedbackPayloadSanitizer::class)->redactString($message), 0, 5000),
         ])->save();
     }
 }
