@@ -25,6 +25,9 @@ class FeedbackPayloadSanitizer
             $value,
         ) ?? $value;
 
+        // Telegram puts the bot token in the URL path, which HTTP exceptions echo.
+        $value = preg_replace('#/bot\d+:[A-Za-z0-9_-]+#', '/bot[filtered]', $value) ?? $value;
+
         $value = preg_replace('/\b(Bearer\s+)[A-Za-z0-9._~+\/=-]+/i', '$1[filtered]', $value) ?? $value;
 
         return preg_replace(
