@@ -106,3 +106,62 @@ it('returns not found for reports without a screenshot', function (): void {
         ->get(route('feedback-hub.screenshot', $report))
         ->assertNotFound();
 });
+
+it('shows intent and transcript panels on the detail page', function (): void {
+    $user = User::query()->create(['name' => 'Nathan Jansen', 'email' => 'nathan@example.test']);
+
+    $report = FeedbackReport::query()->create([
+        'project' => 'Test Project',
+        'type' => 'bug',
+        'title' => 'Download faalt',
+        'page_url' => 'https://example.test/facturen',
+        'intent' => ['goal' => 'Factuur downloaden', 'expected' => 'Een PDF', 'actual' => 'Niets'],
+        'transcript' => [
+            ['role' => 'assistant', 'content' => 'Waar liep je tegenaan?'],
+            ['role' => 'user', 'content' => 'Knop doet niks'],
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('feedback-hub.show', $report))
+        ->assertOk()
+        ->assertSee('Intent')
+        ->assertSee('Factuur downloaden')
+        ->assertSee('Gesprek')
+        ->assertSee('Waar liep je tegenaan?')
+        ->assertSee('Knop doet niks');
+});
+
+it('hides intent and transcript panels when absent', function (): void {
+    $user = User::query()->create(['name' => 'Nathan Jansen', 'email' => 'nathan@example.test']);
+
+    $report = FeedbackReport::query()->create([
+        'project' => 'Test Project',
+        'type' => 'bug',
+        'title' => 'Zonder intent',
+        'page_url' => 'https://example.test',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('feedback-hub.show', $report))
+        ->assertOk()
+        ->assertDontSee('Intent')
+        ->assertDontSee('Gesprek');
+});
+
+it('hides the intent panel when intent holds only empty values', function (): void {
+    $user = User::query()->create(['name' => 'Nathan Jansen', 'email' => 'nathan@example.test']);
+
+    $report = FeedbackReport::query()->create([
+        'project' => 'Test Project',
+        'type' => 'bug',
+        'title' => 'Lege intent',
+        'page_url' => 'https://example.test',
+        'intent' => ['goal' => '', 'expected' => '', 'actual' => ''],
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('feedback-hub.show', $report))
+        ->assertOk()
+        ->assertDontSee('Intent');
+});

@@ -6,6 +6,7 @@ namespace Uteq\FeedbackHub;
 
 use Illuminate\Support\ServiceProvider;
 use Stancl\Tenancy\Contracts\TenantWithDatabase;
+use Stancl\Tenancy\Tenancy;
 use Uteq\FeedbackHub\Console\FeedbackHubHealthCommand;
 use Uteq\FeedbackHub\Console\FeedbackHubInstallCommand;
 use Uteq\FeedbackHub\Console\FeedbackHubTelegramDiscoverCommand;
@@ -32,6 +33,7 @@ class FeedbackHubServiceProvider extends ServiceProvider
 
         $this->publishes([
             __DIR__.'/../database/migrations/2026_05_19_000000_create_feedback_hub_reports_table.php' => database_path((! $this->usesTenantDatabases() ? 'migrations/' : 'migrations/tenant/').'2026_05_19_000000_create_feedback_hub_reports_table.php'),
+            __DIR__.'/../database/migrations/2026_09_15_000000_add_intent_to_feedback_hub_reports_table.php' => database_path((! $this->usesTenantDatabases() ? 'migrations/' : 'migrations/tenant/').'2026_09_15_000000_add_intent_to_feedback_hub_reports_table.php'),
         ], 'feedback-hub-migrations');
 
         $this->publishes([
@@ -89,7 +91,7 @@ class FeedbackHubServiceProvider extends ServiceProvider
     private function usesTenantDatabases(): bool
     {
         // Same rule as Mortel\Tenancy\CurrentTenant::isMultiDatabase(): stancl must run before its model counts.
-        if (! class_exists(\Stancl\Tenancy\Tenancy::class) || ! app()->bound(\Stancl\Tenancy\Tenancy::class)) {
+        if (! class_exists(Tenancy::class) || ! app()->bound(Tenancy::class)) {
             return false;
         }
 

@@ -60,3 +60,93 @@ it('requires authentication for submit', function (): void {
         'url' => 'https://example.test',
     ])->assertUnauthorized();
 });
+
+it('casts intent and transcript to arrays', function (): void {
+    $report = FeedbackReport::query()->create([
+        'type' => 'bug',
+        'title' => 'Test',
+        'page_url' => 'https://example.test',
+        'intent' => ['goal' => 'Factuur downloaden', 'expected' => 'PDF', 'actual' => 'Niets'],
+        'transcript' => [['role' => 'user', 'content' => 'Knop doet niks']],
+    ]);
+
+    expect($report->fresh()->intent)->toBe(['goal' => 'Factuur downloaden', 'expected' => 'PDF', 'actual' => 'Niets'])
+        ->and($report->fresh()->transcript)->toBe([['role' => 'user', 'content' => 'Knop doet niks']]);
+});
+
+it('stores intent and transcript from the chat flow, redacted', function (): void {
+    Queue::fake();
+
+    $user = User::query()->create(['name' => 'Nathan Jansen', 'email' => 'nathan@example.test']);
+
+    $this->actingAs($user)->postJson(route('feedback-hub.store'), [
+        'type' => 'bug',
+        'title' => 'Download faalt',
+        'url' => 'https://example.test/facturen',
+        'intent' => [
+            'goal' => 'Factuur downloaden token=goal-secret',
+            'expected' => 'Een PDF',
+            'actual' => 'Niets',
+        ],
+        'transcript' => [
+            ['role' => 'assistant', 'content' => 'Waar liep je tegenaan?'],
+            ['role' => 'user', 'content' => 'Knop doet niks, Bearer chat-secret'],
+        ],
+    ])->assertCreated();
+
+    $report = FeedbackReport::query()->firstOrFail();
+
+    expect($report->intent)->toBe(['goal' => 'Factuur downloaden token=[filtered]', 'expected' => 'Een PDF', 'actual' => 'Niets'])
+        ->and($report->transcript)->toBe([
+            ['role' => 'assistant', 'content' => 'Waar liep je tegenaan?'],
+            ['role' => 'user', 'content' => 'Knop doet niks, Bearer [filtered]'],
+        ]);
+});
+
+it('validates intent and transcript shape', function (): void {
+    Queue::fake();
+
+    $user = User::query()->create(['name' => 'Nathan Jansen', 'email' => 'nathan@example.test']);
+
+    $this->actingAs($user)->postJson(route('feedback-hub.store'), [
+        'type' => 'bug',
+        'title' => 'Test',
+        'url' => 'https://example.test',
+        'intent' => ['goal' => str_repeat('x', 2001)],
+        'transcript' => [['role' => 'system', 'content' => 'nee']],
+    ])->assertUnprocessable()->assertJsonValidationErrors(['intent.goal', 'transcript.0.role']);
+});
+
+it('keeps the form flow working without intent or transcript', function (): void {
+    Queue::fake();
+
+    $user = User::query()->create(['name' => 'Nathan Jansen', 'email' => 'nathan@example.test']);
+
+    $this->actingAs($user)->postJson(route('feedback-hub.store'), [
+        'type' => 'suggestion',
+        'title' => 'Alleen formulier',
+        'url' => 'https://example.test',
+    ])->assertCreated();
+
+    $report = FeedbackReport::query()->firstOrFail();
+
+    expect($report->intent)->toBeNull()->and($report->transcript)->toBeNull();
+});
+
+it('stores null intent and transcript when the form sends empty values', function (): void {
+    Queue::fake();
+
+    $user = User::query()->create(['name' => 'Nathan Jansen', 'email' => 'nathan@example.test']);
+
+    $this->actingAs($user)->postJson(route('feedback-hub.store'), [
+        'type' => 'bug',
+        'title' => 'Leeg formulier',
+        'url' => 'https://example.test',
+        'intent' => ['goal' => '', 'expected' => '', 'actual' => ''],
+        'transcript' => [],
+    ])->assertCreated();
+
+    $report = FeedbackReport::query()->firstOrFail();
+
+    expect($report->intent)->toBeNull()->and($report->transcript)->toBeNull();
+});

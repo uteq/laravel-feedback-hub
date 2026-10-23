@@ -4,7 +4,9 @@ it('publishes config migration and inspector asset', function (): void {
     $configPath = config_path('feedback-hub.php');
     $assetPath = resource_path('js/vendor/feedback-hub/feedback-inspector.js');
     $migrationPath = database_path('migrations/2026_05_19_000000_create_feedback_hub_reports_table.php');
+    $intentMigrationPath = database_path('migrations/2026_09_15_000000_add_intent_to_feedback_hub_reports_table.php');
 
+    @unlink($intentMigrationPath);
     @unlink($configPath);
     @unlink($assetPath);
     @unlink($migrationPath);
@@ -18,6 +20,7 @@ it('publishes config migration and inspector asset', function (): void {
     expect($configPath)->toBeFile()
         ->and($assetPath)->toBeFile()
         ->and($migrationPath)->toBeFile()
+        ->and($intentMigrationPath)->toBeFile()
         ->and($asset)
         ->toContain("document.addEventListener('click', this.boundHandleDocumentClick, true)")
         ->toContain('pointer-events:none')

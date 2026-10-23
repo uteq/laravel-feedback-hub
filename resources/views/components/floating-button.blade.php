@@ -1,3 +1,7 @@
+@props(['floating' => true])
+
+@php($chatEnabled = \Uteq\FeedbackHub\Support\FeedbackAiAvailability::available())
+
 @auth
     @once
         <style>
@@ -24,192 +28,51 @@
             .fh-icon { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; padding: 0; background: transparent; color: #64748b; }
             .fh-shot { max-height: 220px; width: 100%; object-fit: contain; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
             .fh-code { display: block; overflow-wrap: anywhere; border-radius: 8px; background: #f8fafc; padding: 10px; color: #475569; font-size: 12px; }
+            .fh-chat { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+            .fh-bubble { align-self: flex-start; max-width: 85%; box-sizing: border-box; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 8px; background: #f1f5f9; padding: 9px 12px; color: #172026; font-size: 14px; line-height: 1.45; }
+            .fh-bubble.is-user { align-self: flex-end; background: #135d66; color: white; }
+            .fh-bubble.is-busy { color: #64748b; font-style: italic; }
+            .fh-chat-form { display: flex; align-items: center; gap: 8px; }
+            .fh-chat-form .fh-input { flex: 1 1 auto; min-width: 0; }
+            .fh-error { margin: 0; color: #b91c1c; font-size: 13px; line-height: 1.4; }
+            @media (max-width: 480px) {
+                .fh-button { right: 16px; bottom: 16px; }
+                .fh-backdrop { padding: 12px; }
+                .fh-modal { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
+                .fh-header, .fh-footer, .fh-body { padding: 14px; }
+            }
         </style>
+
+        @include('feedback-hub::partials.widget-script')
 
         <script>
             document.addEventListener('alpine:init', () => {
-                Alpine.data('feedbackHubWidget', (config) => ({
-                    endpoint: config.endpoint,
-                    showModal: false,
-                    submitting: false,
-                    type: 'bug',
-                    title: '',
-                    description: '',
-                    screenshot: null,
-                    elementSelector: null,
-                    elementRect: null,
-                    sessionData: null,
-                    consoleErrors: [],
-                    networkRequests: [],
-                    formState: null,
-
-                    start() {
-                        if (window.FeedbackHubInspector) {
-                            window.FeedbackHubInspector.activate();
-                            return;
-                        }
-
-                        this.showModal = true;
-                    },
-
-                    handleCapture(detail) {
-                        this.screenshot = detail.screenshot;
-                        this.elementSelector = detail.elementSelector;
-                        this.elementRect = detail.elementRect;
-                        this.sessionData = detail.sessionData;
-                        this.consoleErrors = detail.consoleErrors || [];
-                        this.networkRequests = detail.networkRequests || [];
-                        this.formState = detail.formState || null;
-                        this.showModal = true;
-                    },
-
-                    handleScreenshot(detail) {
-                        if (detail.screenshot) {
-                            this.screenshot = detail.screenshot;
-                        }
-                    },
-
-                    close() {
-                        this.showModal = false;
-                        this.reset();
-                    },
-
-                    reset() {
-                        this.type = 'bug';
-                        this.title = '';
-                        this.description = '';
-                        this.screenshot = null;
-                        this.elementSelector = null;
-                        this.elementRect = null;
-                        this.sessionData = null;
-                        this.consoleErrors = [];
-                        this.networkRequests = [];
-                        this.formState = null;
-                    },
-
-                    async submit() {
-                        if (!this.title || this.submitting) return;
-
-                        this.submitting = true;
-                        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
-                            || document.querySelector('input[name="_token"]')?.value
-                            || window.Livewire?.csrfToken?.();
-
-                        try {
-                            const payload = this.redactPayload({
-                                type: this.type,
-                                title: this.title,
-                                description: this.description,
-                                url: this.currentUrl(),
-                                element_selector: this.elementSelector,
-                                element_rect: this.elementRect,
-                                screenshot: this.screenshot,
-                                session_data: this.sessionData || this.collectSessionData(),
-                                console_errors: this.consoleErrors,
-                                network_requests: this.networkRequests,
-                                form_state: this.formState,
-                            });
-
-                            const response = await fetch(this.endpoint, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-TOKEN': csrfToken,
-                                    'Accept': 'application/json',
-                                },
-                                body: JSON.stringify(payload),
-                            });
-
-                            const data = await response.json().catch(() => ({}));
-                            if (!response.ok) {
-                                throw new Error(data.message || 'Feedback kon niet worden verstuurd');
-                            }
-
-                            this.close();
-                            this.toast('Feedback verzonden', data.reference ? `Referentie: ${data.reference}` : '', 'success');
-                        } catch (error) {
-                            this.toast('Er ging iets mis', error.message || 'Probeer het opnieuw', 'danger');
-                        } finally {
-                            this.submitting = false;
-                        }
-                    },
-
-                    currentUrl() {
-                        return this.redactText(window.location.href);
-                    },
-
-                    redactText(value) {
-                        if (!value) return value;
-
-                        if (window.FeedbackHubInspector?.redactText) {
-                            return window.FeedbackHubInspector.redactText(value);
-                        }
-
-                        return String(value)
-                            .replace(/([?&])([^=&#]*(?:password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey|key)[^=&#]*)=([^&#\s]*)/gi, '$1$2=[filtered]')
-                            .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[filtered]')
-                            .replace(/\b(password|passwd|token|secret|authorization|cookie|csrf|api_key|apikey)\s*[:=]\s*([^\s,;&#]+)/gi, '$1=[filtered]');
-                    },
-
-                    redactPayload(value, key = null) {
-                        if (key && this.isSensitiveKey(key)) return '[filtered]';
-                        if (Array.isArray(value)) return value.map((item) => this.redactPayload(item));
-                        if (value && typeof value === 'object') {
-                            return Object.fromEntries(
-                                Object.entries(value).map(([entryKey, entryValue]) => [entryKey, this.redactPayload(entryValue, entryKey)])
-                            );
-                        }
-                        if (typeof value === 'string') return this.redactText(value);
-
-                        return value;
-                    },
-
-                    isSensitiveKey(key) {
-                        return ['password', 'passwd', 'hidden', 'token', 'secret', 'authorization', 'cookie', 'csrf', '_token', 'api_key', 'apikey'].some((part) => String(key).toLowerCase().includes(part));
-                    },
-
-                    collectSessionData() {
-                        return {
-                            url: this.currentUrl(),
-                            userAgent: navigator.userAgent,
-                            viewport: { width: window.innerWidth, height: window.innerHeight },
-                            screen: { width: window.screen.width, height: window.screen.height },
-                            locale: navigator.language,
-                            timestamp: new Date().toISOString(),
-                        };
-                    },
-
-                    toast(heading, text, variant) {
-                        if (window.Flux?.toast) {
-                            window.Flux.toast({ heading, text, variant });
-                            return;
-                        }
-
-                        window.dispatchEvent(new CustomEvent('feedback-hub:toast', { detail: { heading, text, variant } }));
-                    },
-                }));
+                Alpine.data('feedbackHubWidget', (config) => window.FeedbackHubWidget(config));
             });
         </script>
     @endonce
 
     <div
-        x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')) })"
+        x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')), chatEndpoint: @js(route('feedback-hub.chat'), JSON_UNESCAPED_SLASHES), csrfEndpoint: @js(route('feedback-hub.csrf'), JSON_UNESCAPED_SLASHES), chatEnabled: {{ $chatEnabled ? 'true' : 'false' }} })"
         x-on:feedback-hub-captured.window="handleCapture($event.detail)"
         x-on:feedback-hub-screenshot-captured.window="handleScreenshot($event.detail)"
+        x-on:open-feedback-hub.window="start"
         data-feedback-hub-widget
     >
-        <button type="button" class="fh-button" x-on:click="start" x-show="!showModal" aria-label="Feedback geven">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M4 13.5V10a3 3 0 0 1 3-3h3l6-3v16l-6-3H7a3 3 0 0 1-3-3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                <path d="M8 17v2.2c0 .8.6 1.4 1.4 1.4h.8c.8 0 1.4-.6 1.4-1.4V18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                <path d="M19 9.5c.7.6 1 1.5 1 2.5s-.3 1.9-1 2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            </svg>
-        </button>
+        @if ($floating)
+            <button type="button" class="fh-button" x-on:click="start" x-show="!showModal" aria-label="Feedback geven">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M4 13.5V10a3 3 0 0 1 3-3h3l6-3v16l-6-3H7a3 3 0 0 1-3-3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                    <path d="M8 17v2.2c0 .8.6 1.4 1.4 1.4h.8c.8 0 1.4-.6 1.4-1.4V18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    <path d="M19 9.5c.7.6 1 1.5 1 2.5s-.3 1.9-1 2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+            </button>
+        @endif
 
         <div class="fh-backdrop" x-cloak x-show="showModal" x-transition.opacity x-on:click.self="close" x-on:keydown.escape.window="close">
-            <section class="fh-modal" x-show="showModal" x-transition x-on:click.stop>
+            <section class="fh-modal" x-show="showModal" x-transition x-on:click.stop role="dialog" aria-modal="true" aria-labelledby="feedback-hub-heading">
                 <header class="fh-header">
-                    <h2 class="fh-title">Feedback geven</h2>
+                    <h2 id="feedback-hub-heading" class="fh-title">Feedback geven</h2>
                     <button type="button" class="fh-icon" x-on:click="close" aria-label="Sluiten">×</button>
                 </header>
 
@@ -219,34 +82,72 @@
                         <img class="fh-shot" :src="screenshot" alt="Feedback screenshot">
                     </div>
 
-                    <div class="fh-field">
-                        <label class="fh-label">Type</label>
-                        <div class="fh-types">
-                            <button type="button" class="fh-type" :class="{ 'is-active': type === 'bug' }" x-on:click="type = 'bug'">Bug</button>
-                            <button type="button" class="fh-type" :class="{ 'is-active': type === 'suggestion' }" x-on:click="type = 'suggestion'">Suggestie</button>
-                            <button type="button" class="fh-type" :class="{ 'is-active': type === 'question' }" x-on:click="type = 'question'">Vraag</button>
+                    <template x-if="mode === 'chat'">
+                        <div class="fh-field">
+                            <div class="fh-chat" aria-live="polite">
+                                <template x-for="(message, index) in chatMessages" :key="index">
+                                    <div class="fh-bubble" :class="{ 'is-user': message.role === 'user' }" x-text="message.content"></div>
+                                </template>
+                                <div class="fh-bubble is-busy" x-show="chatBusy">Even denken…</div>
+                            </div>
+                            <form class="fh-chat-form" x-on:submit.prevent="sendTurn" x-effect="chatMessages.length; $nextTick(() => $el.scrollIntoView({ block: 'nearest' }))">
+                                <input id="feedback-hub-chat-input" class="fh-input" type="text" x-model="chatInput" maxlength="5000" placeholder="Typ je antwoord" aria-label="Je antwoord" :disabled="chatBusy" autocomplete="off">
+                                <button type="submit" class="fh-primary" :disabled="chatBusy || !chatInput.trim()">Stuur</button>
+                            </form>
                         </div>
-                    </div>
+                    </template>
 
-                    <div class="fh-field">
-                        <label class="fh-label" for="feedback-hub-title">Titel</label>
-                        <input id="feedback-hub-title" class="fh-input" type="text" x-model="title" maxlength="255" placeholder="Korte beschrijving">
-                    </div>
+                    <template x-if="mode !== 'chat'">
+                        <div>
+                            <div class="fh-field">
+                                <label class="fh-label">Type</label>
+                                <div class="fh-types">
+                                    <button type="button" class="fh-type" :class="{ 'is-active': type === 'bug' }" :aria-pressed="(type === 'bug').toString()" x-on:click="type = 'bug'">Bug</button>
+                                    <button type="button" class="fh-type" :class="{ 'is-active': type === 'suggestion' }" :aria-pressed="(type === 'suggestion').toString()" x-on:click="type = 'suggestion'">Suggestie</button>
+                                    <button type="button" class="fh-type" :class="{ 'is-active': type === 'question' }" :aria-pressed="(type === 'question').toString()" x-on:click="type = 'question'">Vraag</button>
+                                </div>
+                            </div>
 
-                    <div class="fh-field">
-                        <label class="fh-label" for="feedback-hub-description">Beschrijving</label>
-                        <textarea id="feedback-hub-description" class="fh-textarea" rows="5" x-model="description" maxlength="5000" placeholder="Wat verwachtte je en wat gebeurde er?"></textarea>
-                    </div>
+                            <div class="fh-field">
+                                <label class="fh-label" for="feedback-hub-title">Titel</label>
+                                <input id="feedback-hub-title" class="fh-input" type="text" x-model="title" maxlength="255" placeholder="Korte beschrijving">
+                            </div>
 
-                    <div class="fh-field" x-show="elementSelector">
-                        <label class="fh-label">Geselecteerd element</label>
-                        <code class="fh-code" x-text="elementSelector"></code>
-                    </div>
+                            <div class="fh-field">
+                                <label class="fh-label" for="feedback-hub-description">Beschrijving</label>
+                                <textarea id="feedback-hub-description" class="fh-textarea" rows="5" x-model="description" maxlength="5000" placeholder="Wat verwachtte je en wat gebeurde er?"></textarea>
+                            </div>
+
+                            <template x-if="mode === 'summary'">
+                                <div>
+                                    <div class="fh-field">
+                                        <label class="fh-label" for="feedback-hub-goal">Doel</label>
+                                        <input id="feedback-hub-goal" class="fh-input" type="text" x-model="intent.goal" maxlength="2000">
+                                    </div>
+                                    <div class="fh-field">
+                                        <label class="fh-label" for="feedback-hub-expected">Verwacht</label>
+                                        <input id="feedback-hub-expected" class="fh-input" type="text" x-model="intent.expected" maxlength="2000">
+                                    </div>
+                                    <div class="fh-field">
+                                        <label class="fh-label" for="feedback-hub-actual">Werkelijk</label>
+                                        <input id="feedback-hub-actual" class="fh-input" type="text" x-model="intent.actual" maxlength="2000">
+                                    </div>
+                                </div>
+                            </template>
+
+                            <div class="fh-field" x-show="elementSelector">
+                                <label class="fh-label">Geselecteerd element</label>
+                                <code class="fh-code" x-text="elementSelector"></code>
+                            </div>
+                        </div>
+                    </template>
+
+                    <p class="fh-error" x-cloak x-show="error" x-text="error" role="alert"></p>
                 </div>
 
                 <footer class="fh-footer">
                     <button type="button" class="fh-secondary" x-on:click="close">Annuleren</button>
-                    <button type="button" class="fh-primary" x-on:click="submit" :disabled="submitting || !title">
+                    <button type="button" class="fh-primary" x-show="mode !== 'chat'" x-on:click="submit" :disabled="submitting || !title">
                         <span x-show="!submitting">Versturen</span>
                         <span x-show="submitting">Bezig...</span>
                     </button>

@@ -34,6 +34,14 @@ class StoreFeedbackReportController extends Controller
             'console_errors' => $sanitizer->sanitize($validated['console_errors'] ?? null),
             'network_requests' => $sanitizer->sanitize($validated['network_requests'] ?? null),
             'form_state' => $sanitizer->sanitize($validated['form_state'] ?? null),
+            'intent' => array_filter(array_map(
+                fn (mixed $value): string => $sanitizer->redactString(is_string($value) || is_int($value) || is_float($value) ? (string) $value : ''),
+                $validated['intent'] ?? [],
+            )) ?: null,
+            'transcript' => array_map(fn (array $message): array => [
+                'role' => (string) ($message['role'] ?? ''),
+                'content' => $sanitizer->redactString((string) ($message['content'] ?? '')),
+            ], array_values(array_filter($validated['transcript'] ?? [], 'is_array'))) ?: null,
             'screenshot_disk' => $screenshot['disk'] ?? null,
             'screenshot_path' => $screenshot['path'] ?? null,
             'screenshot_mime' => $screenshot['mime'] ?? null,
@@ -68,6 +76,13 @@ class StoreFeedbackReportController extends Controller
             'console_errors' => ['nullable', 'array'],
             'network_requests' => ['nullable', 'array'],
             'form_state' => ['nullable', 'array'],
+            'intent' => ['nullable', 'array'],
+            'intent.goal' => ['nullable', 'string', 'max:2000'],
+            'intent.expected' => ['nullable', 'string', 'max:2000'],
+            'intent.actual' => ['nullable', 'string', 'max:2000'],
+            'transcript' => ['nullable', 'array', 'max:40'],
+            'transcript.*.role' => ['required_with:transcript', Rule::in(['user', 'assistant'])],
+            'transcript.*.content' => ['required_with:transcript', 'string', 'max:5000'],
         ];
     }
 
