@@ -39,7 +39,7 @@ flowchart LR
 | Intent in issue, Telegram-regel en adminpagina | Subklasse van IssueBodyBuilder en een view-slot in mortelos/feedback | 5, verhuizen | zelfde |
 
 Tegenlezer: Sonnet 5.5 high. Hij vond geen lagere trede. Wel vier verwerkte punten:
-- `laravel/ai` gaat in `suggest` in plaats van `require`. De chat staat alleen aan als het pakket er is, zodat andere gebruikers van de basis (zoals Sijperda) niets extra meekrijgen. De Goede en Bergman installeren het zelf.
+- `laravel/ai` gaat in `suggest` in plaats van `require`. De chat staat alleen aan als het pakket er is, zodat een site zonder chat niets extra meekrijgt. De Goede, Bergman en Sijperda installeren het zelf.
 - Intent en transcript horen direct in de basiscontroller.
 - Issue-tekst, Telegram-regel en adminpagina tonen de intent direct in de basis. De mortel-subklasse, de view-slot en `admin/intent.blade.php` vervallen dan.
 - De migratie houdt exact dezelfde bestandsnaam. uteq/os heeft hem al in `database/migrations` en in `database/migrations/tenant`.
