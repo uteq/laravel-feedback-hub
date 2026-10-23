@@ -15,6 +15,7 @@
         "illuminate/view": "^12.0|^13.0"
     },
     "require-dev": {
+        "laravel/ai": "^0.4",
         "laravel/pint": "^1.29",
         "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^4.0",
@@ -48,5 +49,8 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "suggest": {
+        "laravel/ai": "Required for the optional AI feedback intake chat (^0.4)."
+    }
 }

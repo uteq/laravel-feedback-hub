@@ -31,6 +31,23 @@ class IssueBodyBuilder
             $lines[] = '';
         }
 
+        $intent = array_filter([
+            'Doel' => $report->intent['goal'] ?? null,
+            'Verwacht' => $report->intent['expected'] ?? null,
+            'Werkelijk' => $report->intent['actual'] ?? null,
+        ]);
+
+        if ($intent !== []) {
+            $lines[] = '## Intent';
+            $lines[] = '';
+
+            foreach ($intent as $label => $value) {
+                $lines[] = "**{$label}:** ".$this->redact(is_string($value) || is_int($value) || is_float($value) ? (string) $value : '');
+            }
+
+            $lines[] = '';
+        }
+
         $this->appendIssueContext($lines, $report);
 
         if ($report->element_selector) {
@@ -64,6 +81,10 @@ class IssueBodyBuilder
 
         if ($report->description) {
             $lines[] = 'Omschrijving: '.$this->html($this->summary((string) $report->description, 220));
+        }
+
+        if ($goal = $report->intent['goal'] ?? null) {
+            $lines[] = 'Doel: '.$this->html($this->summary($this->redact(is_string($goal) || is_int($goal) || is_float($goal) ? (string) $goal : ''), 220));
         }
 
         $this->appendTelegramContext($lines, $report);

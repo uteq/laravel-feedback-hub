@@ -33,6 +33,25 @@
                 <p class="muted">Geen beschrijving.</p>
             @endif
 
+            @if(array_filter($report->intent ?? []))
+                <h2>Intent</h2>
+                <dl>
+                    @foreach(['goal' => 'Doel', 'expected' => 'Verwacht', 'actual' => 'Werkelijk'] as $key => $label)
+                        @if(!empty($report->intent[$key]))
+                            <dt>{{ $label }}</dt>
+                            <dd style="white-space: pre-wrap;">{{ $report->intent[$key] }}</dd>
+                        @endif
+                    @endforeach
+                </dl>
+            @endif
+
+            @if($report->transcript)
+                <h2>Gesprek</h2>
+                @foreach($report->transcript as $message)
+                    <p style="white-space: pre-wrap;"><strong>{{ ($message['role'] ?? '') === 'user' ? 'Gebruiker' : 'Assistent' }}:</strong> {{ $message['content'] ?? '' }}</p>
+                @endforeach
+            @endif
+
             @includeWhen(config('feedback-hub.view_slots.admin_detail'), config('feedback-hub.view_slots.admin_detail'), ['report' => $report])
 
             @if($report->screenshot_path)

@@ -1,6 +1,13 @@
 <?php
 
 return [
+    'ai' => [
+        'enabled' => env('FEEDBACK_HUB_AI_ENABLED', false),
+        'provider' => env('FEEDBACK_HUB_AI_PROVIDER', 'anthropic'),
+        'model' => env('FEEDBACK_HUB_AI_MODEL', 'claude-haiku-4-5'),
+        'max_turns' => (int) env('FEEDBACK_HUB_AI_MAX_TURNS', 6),
+    ],
+
     'enabled' => env('FEEDBACK_HUB_ENABLED', true),
 
     'project' => env('FEEDBACK_HUB_PROJECT', env('APP_NAME', 'Laravel')),

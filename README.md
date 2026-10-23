@@ -96,3 +96,21 @@ If discovery shows no channel, add the bot as channel admin, post once in the ch
 ## Privacy
 
 The browser sends field names, types and filled state only. Passwords, hidden fields, tokens, secrets and sensitive URL query values are excluded in the browser and filtered again on the server.
+
+## AI intake chat
+
+Install the optional AI SDK to use the intake chat backend:
+
+```bash
+composer require laravel/ai:^0.4
+```
+
+Set `FEEDBACK_HUB_AI_ENABLED=true` and `ANTHROPIC_API_KEY` in your environment.
+Optionally configure `FEEDBACK_HUB_AI_PROVIDER` (default `anthropic`),
+`FEEDBACK_HUB_AI_MODEL` (default `claude-haiku-4-5`) and
+`FEEDBACK_HUB_AI_MAX_TURNS` (default `6`). Without a provider key, the chat
+falls back to the form.
+
+Authenticated clients can POST their message history and page URL to
+`feedback-hub.chat`. The response contains a reply and, when ready, a structured
+summary. Submit that summary with `intent` and `transcript` to `feedback-hub.store`.

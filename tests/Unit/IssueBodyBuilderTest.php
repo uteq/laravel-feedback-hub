@@ -56,3 +56,63 @@ it('redacts sensitive values before building external issue and telegram bodies'
         ])
         ->and($telegramButtons)->toHaveCount(2);
 });
+
+it('adds an intent block to the issue body and a goal line to telegram', function (): void {
+    $report = FeedbackReport::query()->create([
+        'type' => 'bug',
+        'title' => 'Download faalt',
+        'page_url' => 'https://example.test/facturen',
+        'intent' => ['goal' => 'Factuur als PDF opslaan', 'expected' => 'Een download', 'actual' => 'Niets gebeurt'],
+        'transcript' => [['role' => 'user', 'content' => 'TRANSCRIPT-MARKER']],
+    ]);
+
+    $builder = app(IssueBodyBuilder::class);
+    $body = $builder->build($report);
+    $telegram = $builder->telegramMessage($report);
+
+    expect($body)
+        ->toContain("## Intent\n\n**Doel:** Factuur als PDF opslaan\n**Verwacht:** Een download\n**Werkelijk:** Niets gebeurt")
+        ->not->toContain('TRANSCRIPT-MARKER');
+
+    expect($telegram)
+        ->toContain('Doel: Factuur als PDF opslaan')
+        ->not->toContain('TRANSCRIPT-MARKER');
+});
+
+it('omits the intent block when there is no intent', function (): void {
+    $report = FeedbackReport::query()->create([
+        'type' => 'bug',
+        'title' => 'Zonder intent',
+        'page_url' => 'https://example.test',
+    ]);
+
+    $builder = app(IssueBodyBuilder::class);
+
+    expect($builder->build($report))->not->toContain('## Intent')
+        ->and($builder->telegramMessage($report))->not->toContain('Doel:');
+});
+
+it('redacts intent in external messages and escapes the telegram goal', function (): void {
+    $report = FeedbackReport::query()->create([
+        'type' => 'bug',
+        'title' => 'Download failed',
+        'page_url' => 'https://example.test',
+        'intent' => [
+            'goal' => '<PDF> token=goal-secret',
+            'expected' => 'Bearer expected-secret',
+            'actual' => 'api_key=actual-secret',
+        ],
+    ]);
+
+    $builder = app(IssueBodyBuilder::class);
+
+    expect($builder->build($report))
+        ->toContain('**Doel:** <PDF> token=[filtered]')
+        ->toContain('**Verwacht:** Bearer [filtered]')
+        ->toContain('**Werkelijk:** api_key=[filtered]')
+        ->not->toContain('goal-secret', 'expected-secret', 'actual-secret');
+
+    expect($builder->telegramMessage($report))
+        ->toContain('Doel: &lt;PDF&gt; token=[filtered]')
+        ->not->toContain('goal-secret');
+});

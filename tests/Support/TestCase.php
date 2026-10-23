@@ -4,6 +4,7 @@ namespace Uteq\FeedbackHub\Tests\Support;
 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Laravel\Ai\AiServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 use Uteq\FeedbackHub\FeedbackHubServiceProvider;
 
@@ -13,6 +14,7 @@ class TestCase extends Orchestra
     {
         return [
             FeedbackHubServiceProvider::class,
+            AiServiceProvider::class,
         ];
     }
 
