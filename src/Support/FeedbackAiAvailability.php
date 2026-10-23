@@ -19,9 +19,25 @@ class FeedbackAiAvailability
             return false;
         }
 
-        $provider = (string) config('feedback-hub.ai.provider');
+        $provider = static::provider();
 
         return filled(config("ai.providers.{$provider}.key"));
+    }
+
+    public static function provider(): string
+    {
+        $provider = (string) config('feedback-hub.ai.provider');
+        $key = config('feedback-hub.ai.key');
+
+        if (blank($key)) {
+            return $provider;
+        }
+
+        $config = config("ai.providers.{$provider}", ['driver' => $provider]);
+        $config['key'] = $key;
+        config()->set('ai.providers.feedback-hub', $config);
+
+        return 'feedback-hub';
     }
 
     protected static function aiInstalled(): bool

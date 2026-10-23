@@ -24,8 +24,34 @@ function chatPayload(array $overrides = []): array
 
 beforeEach(function (): void {
     config()->set('feedback-hub.ai.enabled', true);
+    config()->set('feedback-hub.ai.key', null);
     config()->set('ai.providers.anthropic.key', 'test-key');
 });
+
+it('prompts with the resolved provider without changing the app key', function (?string $dedicatedKey, ?string $appKey, string $provider): void {
+    config()->set('feedback-hub.ai.key', $dedicatedKey);
+    config()->set('ai.providers.anthropic.key', $appKey);
+    FeedbackIntakeAgent::fake([['reply' => 'Ok', 'ready' => false, 'summary' => null]]);
+
+    $this->actingAs(chatUser())->postJson(route('feedback-hub.chat'), chatPayload())
+        ->assertOk()
+        ->assertJsonPath('reply', 'Ok');
+
+    FeedbackIntakeAgent::assertPrompted(fn (AgentPrompt $prompt): bool => $prompt->provider->name() === $provider
+        && $prompt->model === 'claude-haiku-4-5'
+        && $prompt->provider->providerCredentials()['key'] === ($dedicatedKey ?: $appKey));
+
+    expect(config('ai.providers.anthropic.key'))->toBe($appKey);
+
+    if ($dedicatedKey !== null && $dedicatedKey !== '') {
+        expect(config('ai.providers.feedback-hub.key'))->toBe($dedicatedKey);
+    }
+})->with([
+    'dedicated key only' => ['feedback-test-key', '', 'feedback-hub'],
+    'both keys' => ['feedback-test-key', 'app-test-key', 'feedback-hub'],
+    'no dedicated key' => [null, 'app-test-key', 'anthropic'],
+    'empty dedicated key' => ['', 'app-test-key', 'anthropic'],
+]);
 
 it('returns the agent reply while the intent is not yet clear', function (): void {
     FeedbackIntakeAgent::fake([

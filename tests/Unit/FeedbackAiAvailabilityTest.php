@@ -4,7 +4,39 @@ use Uteq\FeedbackHub\Support\FeedbackAiAvailability;
 
 beforeEach(function (): void {
     config()->set('feedback-hub.ai.enabled', true);
+    config()->set('feedback-hub.ai.key', null);
     config()->set('ai.providers.anthropic.key', 'test-key');
+});
+
+it('is available with only the dedicated key', function (): void {
+    config()->set('feedback-hub.ai.key', 'feedback-test-key');
+    config()->set('ai.providers.anthropic.key', '');
+
+    expect(FeedbackAiAvailability::available())->toBeTrue();
+});
+
+it('copies the selected provider settings and overrides only the key', function (): void {
+    config()->set('feedback-hub.ai.provider', 'custom');
+    config()->set('feedback-hub.ai.key', 'feedback-test-key');
+    $original = ['driver' => 'openai', 'key' => 'app-test-key', 'url' => 'https://ai.example.test'];
+    config()->set('ai.providers.custom', $original);
+
+    expect(FeedbackAiAvailability::provider())->toBe('feedback-hub')
+        ->and(config('ai.providers.feedback-hub'))->toBe([
+            'driver' => 'openai', 'key' => 'feedback-test-key', 'url' => 'https://ai.example.test',
+        ])
+        ->and(config('ai.providers.custom'))->toBe($original);
+});
+
+it('uses the provider name as driver when its configuration is missing', function (): void {
+    config()->set('feedback-hub.ai.provider', 'openai');
+    config()->set('feedback-hub.ai.key', 'feedback-test-key');
+    config()->set('ai.providers', []);
+
+    expect(FeedbackAiAvailability::provider())->toBe('feedback-hub')
+        ->and(config('ai.providers.feedback-hub'))->toBe([
+            'driver' => 'openai', 'key' => 'feedback-test-key',
+        ]);
 });
 
 it('is available when the module, the ai flag and the provider key are set', function (): void {

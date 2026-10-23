@@ -113,6 +113,10 @@ Optionally configure `FEEDBACK_HUB_AI_PROVIDER` (default `anthropic`),
 `FEEDBACK_HUB_AI_MAX_TURNS` (default `6`). Without a provider key, the chat
 falls back to the form.
 
+Set `FEEDBACK_HUB_AI_KEY` to use a dedicated API key for the feedback chat.
+It uses the configured provider's settings without changing the app's provider
+key. When empty, the chat continues to use the app's key (such as `ANTHROPIC_API_KEY`).
+
 Authenticated clients can POST their message history and page URL to
 `feedback-hub.chat`. The response contains a reply and, when ready, a structured
 summary. Submit that summary with `intent` and `transcript` to `feedback-hub.store`.
