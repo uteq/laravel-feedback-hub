@@ -224,7 +224,10 @@ window.FeedbackHubInspector = {
                 return this.createPlaceholderScreenshot();
             }
 
-            if (this.highlightOverlay) this.highlightOverlay.style.display = 'none';
+            // Mark the selection with the body-level overlay, not an inline style on the
+            // element: a Livewire re-render (wire:poll) wipes inline styles while the user
+            // is still in the share picker.
+            this.highlightElement(this.selectedElement);
 
             widget = document.querySelector('[data-feedback-hub-widget]');
             banner = document.getElementById('feedback-hub-instruction-banner');
@@ -237,13 +240,6 @@ window.FeedbackHubInspector = {
             if (banner) {
                 originalBannerDisplay = banner.style.display || '';
                 banner.style.display = 'none';
-            }
-
-            if (this.selectedElement) {
-                this.selectedElement.dataset.feedbackHubOriginalOutline = this.selectedElement.style.outline || '';
-                this.selectedElement.dataset.feedbackHubOriginalOutlineOffset = this.selectedElement.style.outlineOffset || '';
-                this.selectedElement.style.outline = '3px solid #135d66';
-                this.selectedElement.style.outlineOffset = '2px';
             }
 
             // Keep this call in the original click activation window. Awaiting before
@@ -296,12 +292,7 @@ window.FeedbackHubInspector = {
             }
             if (widget) widget.style.visibility = originalWidgetVisibility || '';
             if (banner) banner.style.display = originalBannerDisplay || '';
-            if (this.selectedElement) {
-                this.selectedElement.style.outline = this.selectedElement.dataset.feedbackHubOriginalOutline || '';
-                this.selectedElement.style.outlineOffset = this.selectedElement.dataset.feedbackHubOriginalOutlineOffset || '';
-                delete this.selectedElement.dataset.feedbackHubOriginalOutline;
-                delete this.selectedElement.dataset.feedbackHubOriginalOutlineOffset;
-            }
+            this.hideOverlay();
         }
     },
 
