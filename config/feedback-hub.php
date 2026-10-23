@@ -4,6 +4,8 @@ return [
     'ai' => [
         'enabled' => env('FEEDBACK_HUB_AI_ENABLED', false),
         'provider' => env('FEEDBACK_HUB_AI_PROVIDER', 'anthropic'),
+        // Optional dedicated key for the feedback chat, leaving the app's provider key unchanged.
+        'key' => env('FEEDBACK_HUB_AI_KEY'),
         'model' => env('FEEDBACK_HUB_AI_MODEL', 'claude-haiku-4-5'),
         'max_turns' => (int) env('FEEDBACK_HUB_AI_MAX_TURNS', 6),
     ],

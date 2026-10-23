@@ -68,7 +68,7 @@ final class FeedbackChatController extends Controller
             $response = $agent->prompt(
                 $current->content ?? '',
                 $this->attachments($validated['screenshot'] ?? null),
-                (string) config('feedback-hub.ai.provider'),
+                FeedbackAiAvailability::provider(),
                 (string) config('feedback-hub.ai.model'),
             );
         } catch (Throwable $exception) {
