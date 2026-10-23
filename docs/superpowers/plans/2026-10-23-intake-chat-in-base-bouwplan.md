@@ -146,3 +146,27 @@ Tegenlezer: Sonnet 5.5 high. Hij vond geen lagere trede. Wel vier verwerkte punt
 
 - 2026-10-23 · worktree /Users/uteq/Sites/uteq/laravel-feedback-hub-chat aangemaakt vanaf origin/main (c7fe7c8)
 - 2026-10-23 12:05 · akkoord Nathan op plan, plus Sijperda erbij (1A) en andere klanten later per site (2A)
+- 2026-10-23 12:08 · taak 1 · uitgegeven aan gpt-6.1-sol, medium · taskId `node:delegated-task:command%3Amcp%3Abfba1e4c-b679-48c0-9ae9-ab251d5d9644%3Adelegate-task%3Aintake-chat-task1-r1` · thread `thread:delegated-task:command%3Amcp%3Abfba1e4c-b679-48c0-9ae9-ab251d5d9644%3Adelegate-task%3Aintake-chat-task1-r1`
+- 2026-10-23 12:20 · taak 1 · goedgekeurd · pest 89 passed/3 skipped, pint ok · commit 841bc6f
+- 2026-10-23 12:22 · taak 2 · uitgegeven aan Opus 5.5, high · taskId `node:delegated-task:command%3Amcp%3Abfba1e4c-b679-48c0-9ae9-ab251d5d9644%3Adelegate-task%3Aintake-chat-task2-r1` · thread `thread:delegated-task:command%3Amcp%3Abfba1e4c-b679-48c0-9ae9-ab251d5d9644%3Adelegate-task%3Aintake-chat-task2-r1`
+
+## Bijlage · kandidaten voor uitrol na dit plan (keuze 2A)
+
+Inventaris 23-10 door Haiku 5.5. Ruwe gegevens staan in /tmp/fbscan/raw/. Elke site gaat pas live na een ja van Nathan.
+
+| Site | Live | Wie logt in | Opmerking |
+|---|---|---|---|
+| vloerspot | vloergroep.nl | klanten, aannemers, inspecteurs, admins | Heeft al een eigen feedbacksysteem (App\Models\Feedback). Eerst kiezen: vervangen of laten. Livewire-beta. |
+| vrlk-mvp | app.vrlk-bedrijfshuisvesting.nl | medewerkers VRLK | geschikt |
+| civilgrow | app.civilgrow.nl | medewerkers | geschikt; let op de ongepushte lokale branch |
+| bbh | bbh.on-forge.com | medewerkers (Microsoft SSO) | MortelOS-app: mortelos/feedback of de basis |
+| biogasvvo | biogasvvo.nl | klanten | geschikt; Livewire-beta, eerst testen |
+| easie-sync | easie-sync.on-forge.com | beheerders, medewerkers | geschikt |
+| safesent | app.safesent.nl | teamleden | geschikt op app.; safesent.nl draait nog PHP 8.2; whitelabel-domeinen tonen de knop ook |
+| reflections | reflections.uteq.nl | eindgebruikers | geschikt (PHP 8.3) |
+| optocht-stnyk | optocht.uteq.nl | alleen Filament-beheer | alleen in het paneel |
+| crm, clawd-os | crm.uteq.nl, clawd-os.on-forge.com | intern | weinig nut |
+| dsgn-projects | achter basic auth | portaal (in code) | pas als de site echt live is |
+| niet geschikt | sneeknaaropwekking, obp, biobase-v2, nathanjansen, sietskerinkema, laatjehoren-landing, uteq-site; geen live site: aiteam, conversiefreaks, gg-platform, noorderinzicht-sales | | geen echte ingelogde gebruikers of niet live |
+- 2026-10-23 12:35 · taak 2 · goedgekeurd · pest 93 passed/3 skipped, pint ok · commit 4c8e0b0
+- 2026-10-23 12:50 · browsercheck orchestrator op lokale De Goede (Herd-workspace feedback-chat-check, basis via path-repo): chat → samenvatting → versturen 201 (FH-2026-00001/2), Nederlands gebleven, admin toont intent + gesprek, desktop 1280 en mobiel 375, geen consolefouten. Screenshots /tmp/fbcheck/shots
