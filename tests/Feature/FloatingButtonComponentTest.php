@@ -98,6 +98,14 @@ it('includes the shared widget script once when the component renders twice', fu
         ->and(substr_count($html, 'class="fh-button"'))->toBe(1);
 });
 
+it('keeps the button at its desktop offset on phones', function (): void {
+    // Host chat composers keep their send button clear of the 24px corner; a smaller offset covers it.
+    $html = renderFloatingButtonFor(widgetUser());
+
+    expect($html)->toContain('.fh-button { position: fixed; right: 24px; bottom: 24px;')
+        ->and(str($html)->after('@media (max-width: 480px)')->before('</style>')->toString())->not->toContain('.fh-button');
+});
+
 it('exposes the shared widget script as a standalone view', function (): void {
     $html = view('feedback-hub::partials.widget-script')->render();
 

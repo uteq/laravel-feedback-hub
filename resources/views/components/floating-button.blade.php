@@ -36,7 +36,6 @@
             .fh-chat-form .fh-input { flex: 1 1 auto; min-width: 0; }
             .fh-error { margin: 0; color: #b91c1c; font-size: 13px; line-height: 1.4; }
             @media (max-width: 480px) {
-                .fh-button { right: 16px; bottom: 16px; }
                 .fh-backdrop { padding: 12px; }
                 .fh-modal { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
                 .fh-header, .fh-footer, .fh-body { padding: 14px; }
