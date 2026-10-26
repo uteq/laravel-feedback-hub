@@ -108,3 +108,20 @@ it('fails the live github check when configured labels do not exist', function (
         ->expectsOutputToContain('GitHub label check failed: feedback')
         ->assertFailed();
 });
+
+it('lists os inbox configuration without exposing its key', function (?string $url, ?string $key, string $message, int $exit): void {
+    config([
+        'feedback-hub.github.enabled' => false,
+        'feedback-hub.linear.enabled' => false,
+        'feedback-hub.telegram.enabled' => false,
+        'feedback-hub.os_inbox.url' => $url,
+        'feedback-hub.os_inbox.key' => $key,
+    ]);
+    Http::fake();
+    $this->artisan('feedback-hub:health')->expectsOutputToContain($message)->doesntExpectOutputToContain('os-test-key')->assertExitCode($exit);
+    Http::assertNothingSent();
+})->with([
+    [null, null, 'OS inbox: disabled', 0],
+    ['https://os.example.test/inbox', null, 'OS inbox: missing configuration', 1],
+    ['https://os.example.test/inbox', 'os-test-key', 'OS inbox: configured', 0],
+]);

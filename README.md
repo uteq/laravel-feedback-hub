@@ -95,6 +95,26 @@ If discovery shows no channel, add the bot as channel admin, post once in the ch
 5. Set the returned ID as `FEEDBACK_HUB_TELEGRAM_CHAT_ID`.
 6. Run `php artisan feedback-hub:health --live` and `php artisan feedback-hub:test-delivery --send`.
 
+## OS inbox
+
+The optional OS inbox destination is off by default. Set both environment values to enable it:
+
+```dotenv
+FEEDBACK_HUB_OS_INBOX_URL=https://your-os.example/inbox-endpoint
+FEEDBACK_HUB_OS_INBOX_KEY=
+```
+
+After Telegram, the package posts a version 1 multipart payload with the report summary,
+intent, page URL and selector, reporter details, browser information, the last 30 console
+errors and network requests, GitHub/Linear links, UUID, reference and creation time.
+It attaches the screenshot when available. The transcript and form state are never sent.
+The receiver deduplicates reports on `uuid`, including job retries.
+
+A URL without a key logs a warning and skips delivery. HTTP 4xx responses log a warning
+without failing the report; HTTP 5xx responses and connection errors use the job's retries.
+The health command checks configuration only for this destination; use test delivery to
+exercise the endpoint.
+
 ## Privacy
 
 The browser sends field names, types and filled state only. Passwords, hidden fields, tokens, secrets and sensitive URL query values are excluded in the browser and filtered again on the server.

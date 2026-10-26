@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Storage;
 use Throwable;
 use Uteq\FeedbackHub\Clients\GitHubFeedbackClient;
 use Uteq\FeedbackHub\Clients\LinearFeedbackClient;
+use Uteq\FeedbackHub\Clients\OsInboxFeedbackClient;
 use Uteq\FeedbackHub\Clients\TelegramFeedbackClient;
 use Uteq\FeedbackHub\Models\FeedbackReport;
 use Uteq\FeedbackHub\Support\FeedbackPayloadSanitizer;
@@ -102,6 +103,16 @@ class ProcessFeedbackReportJob implements ShouldBeUnique, ShouldQueue
                         'telegram_message_id' => $result['message_id'],
                         'telegram_sent_at' => now(),
                     ])->save();
+                }
+            }
+
+            if (filled(config('feedback-hub.os_inbox.url'))) {
+                $osInbox = app(OsInboxFeedbackClient::class);
+
+                if (! $osInbox->isConfigured()) {
+                    Log::warning('os_inbox_not_configured', ['report' => $this->report->getKey()]);
+                } else {
+                    $osInbox->send($this->report);
                 }
             }
 
