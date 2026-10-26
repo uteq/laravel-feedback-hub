@@ -29,3 +29,21 @@ it('uses existing project env names as configuration fallbacks', function (): vo
         ->and($config['telegram']['bot_token'])->toBe('telegram-token')
         ->and($config['telegram']['chat_id'])->toBe('-100123');
 });
+
+it('keeps os inbox off by default and reads its dedicated environment keys', function (): void {
+    $repository = Env::getRepository();
+    try {
+        $repository->clear('FEEDBACK_HUB_OS_INBOX_URL');
+        $repository->clear('FEEDBACK_HUB_OS_INBOX_KEY');
+        $config = require __DIR__.'/../../config/feedback-hub.php';
+        expect($config['os_inbox']['url'])->toBeNull()
+            ->and($config['os_inbox']['key'])->toBeNull();
+        $repository->set('FEEDBACK_HUB_OS_INBOX_URL', 'https://os.example.test/inbox');
+        $repository->set('FEEDBACK_HUB_OS_INBOX_KEY', 'os-test-key');
+        $config = require __DIR__.'/../../config/feedback-hub.php';
+        expect($config['os_inbox'])->toBe(['url' => 'https://os.example.test/inbox', 'key' => 'os-test-key']);
+    } finally {
+        $repository->clear('FEEDBACK_HUB_OS_INBOX_URL');
+        $repository->clear('FEEDBACK_HUB_OS_INBOX_KEY');
+    }
+});

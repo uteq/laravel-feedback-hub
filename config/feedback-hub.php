@@ -42,6 +42,11 @@ return [
         'label_ids' => env('FEEDBACK_HUB_LINEAR_LABEL_IDS', env('LINEAR_LABEL_IDS', '')),
     ],
 
+    'os_inbox' => [
+        'url' => env('FEEDBACK_HUB_OS_INBOX_URL'),
+        'key' => env('FEEDBACK_HUB_OS_INBOX_KEY'),
+    ],
+
     'telegram' => [
         'enabled' => env('FEEDBACK_HUB_TELEGRAM_ENABLED', true),
         'bot_token' => env('FEEDBACK_HUB_TELEGRAM_BOT_TOKEN', env('TELEGRAM_BOT_TOKEN')),

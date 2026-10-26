@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Uteq\FeedbackHub\Clients\GitHubFeedbackClient;
 use Uteq\FeedbackHub\Clients\LinearFeedbackClient;
+use Uteq\FeedbackHub\Clients\OsInboxFeedbackClient;
 use Uteq\FeedbackHub\Clients\TelegramFeedbackClient;
 
 class FeedbackHubHealthCommand extends Command
@@ -28,6 +29,8 @@ class FeedbackHubHealthCommand extends Command
         $ok = $this->checkIntegration('GitHub', (bool) config('feedback-hub.github.enabled'), $github->isConfigured()) && $ok;
         $ok = $this->checkIntegration('Linear', (bool) config('feedback-hub.linear.enabled'), $linear->isConfigured()) && $ok;
         $ok = $this->checkIntegration('Telegram', (bool) config('feedback-hub.telegram.enabled'), $telegram->isConfigured()) && $ok;
+
+        $ok = $this->checkIntegration('OS inbox', filled(config('feedback-hub.os_inbox.url')), app(OsInboxFeedbackClient::class)->isConfigured()) && $ok;
 
         if ($this->option('live')) {
             $ok = $this->checkGitHubLive($github) && $ok;

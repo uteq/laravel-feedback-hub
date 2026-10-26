@@ -8,7 +8,7 @@ it('dry-runs delivery without creating local or external records', function (): 
 
     $this->artisan('feedback-hub:test-delivery')
         ->expectsOutputToContain('Feedback Hub delivery dry-run passed.')
-        ->expectsOutputToContain('Use --send to create real GitHub, Linear and Telegram deliveries.')
+        ->expectsOutputToContain('Use --send to create real GitHub, Linear, Telegram and OS inbox deliveries.')
         ->assertSuccessful();
 
     expect(FeedbackReport::query()->count())->toBe(0);
@@ -75,4 +75,30 @@ it('sends a real delivery test through the configured clients', function (): voi
         ->and($report->telegram_message_id)->toBe('44');
 
     Http::assertSentCount(3);
+});
+
+it('lists os inbox during a dry run without sending or exposing the key', function (?string $url, ?string $key, string $message): void {
+    config(['feedback-hub.os_inbox.url' => $url, 'feedback-hub.os_inbox.key' => $key]);
+    Http::fake();
+    $this->artisan('feedback-hub:test-delivery')->expectsOutputToContain($message)->doesntExpectOutputToContain('os-test-key')->assertSuccessful();
+    Http::assertNothingSent();
+    expect(FeedbackReport::query()->count())->toBe(0);
+})->with([
+    [null, null, 'OS inbox: disabled'],
+    ['https://os.example.test/inbox', null, 'OS inbox: missing configuration'],
+    ['https://os.example.test/inbox', 'os-test-key', 'OS inbox: configured'],
+]);
+
+it('sends a supported report type to os inbox in send mode', function (): void {
+    config([
+        'feedback-hub.github.enabled' => false,
+        'feedback-hub.linear.enabled' => false,
+        'feedback-hub.telegram.enabled' => false,
+        'feedback-hub.os_inbox.url' => 'https://os.example.test/inbox',
+        'feedback-hub.os_inbox.key' => 'os-test-key',
+    ]);
+    Http::fake();
+    $this->artisan('feedback-hub:test-delivery --send')->expectsOutputToContain('OS inbox: configured')->doesntExpectOutputToContain('os-test-key')->assertSuccessful();
+    Http::assertSentCount(1);
+    Http::assertSent(fn ($request): bool => json_decode(collect($request->data())->firstWhere('name', 'payload')['contents'], true)['type'] === 'question');
 });

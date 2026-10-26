@@ -5,19 +5,24 @@ namespace Uteq\FeedbackHub\Console;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Uteq\FeedbackHub\Clients\OsInboxFeedbackClient;
 use Uteq\FeedbackHub\Jobs\ProcessFeedbackReportJob;
 use Uteq\FeedbackHub\Models\FeedbackReport;
 use Uteq\FeedbackHub\Support\IssueBodyBuilder;
 
 class FeedbackHubTestDeliveryCommand extends Command
 {
-    protected $signature = 'feedback-hub:test-delivery {--send : Create real GitHub, Linear and Telegram deliveries}';
+    protected $signature = 'feedback-hub:test-delivery {--send : Create real GitHub, Linear, Telegram and OS inbox deliveries}';
 
     protected $description = 'Validate Feedback Hub delivery payloads, optionally sending a real test report.';
 
     public function handle(IssueBodyBuilder $bodyBuilder): int
     {
         $send = (bool) $this->option('send');
+
+        $this->line('OS inbox: '.(blank(config('feedback-hub.os_inbox.url'))
+            ? 'disabled'
+            : (app(OsInboxFeedbackClient::class)->isConfigured() ? 'configured' : 'missing configuration')));
 
         if (! $send) {
             $report = $this->sampleReport();
@@ -26,7 +31,7 @@ class FeedbackHubTestDeliveryCommand extends Command
             $this->line('Reference: '.$report->reference);
             $this->line('GitHub/Linear body bytes: '.strlen($bodyBuilder->build($report)));
             $this->line('Telegram body bytes: '.strlen($bodyBuilder->telegramMessage($report)));
-            $this->line('Use --send to create real GitHub, Linear and Telegram deliveries.');
+            $this->line('Use --send to create real GitHub, Linear, Telegram and OS inbox deliveries.');
 
             return self::SUCCESS;
         }
@@ -110,7 +115,7 @@ class FeedbackHubTestDeliveryCommand extends Command
 
         return [
             'project' => (string) config('feedback-hub.project'),
-            'type' => 'test',
+            'type' => filled(config('feedback-hub.os_inbox.url')) ? 'question' : 'test',
             'title' => 'Feedback Hub delivery test '.$timestamp,
             'description' => 'Automated Feedback Hub delivery test.',
             'page_url' => url('/feedback-hub/test-delivery'),
