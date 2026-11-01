@@ -1,6 +1,6 @@
 # Schermafbeelding zonder browservraag en melding na Versturen · impactmap en bouwplan
 
-**Status:** akkoord van Nathan op 2026-11-01 (plan, @zumer/snapdom 3.7.0, dev-testpakketten); taak 1 in uitvoering
+**Status:** gebouwd; PR open, mergen en tag `v0.5.0` wachten op ja van Nathan
 **Doel:** Wie in een klantapp op de feedbackknop klikt, krijgt geen vraag van de browser meer, en ziet in elke app na Versturen een melding.
 **Soort werk:** pakket dat bij negen apps draait (geen `mortelos/*`, wel gedeeld), dus wint: een herbruikbaar patroon dat de apps via een bestaande haak overnemen, zonder klantnamen of klantregels in de code.
 **Orchestrator:** Opus 5.5 xhigh, de main sessie. Bouwt zelf niets: geeft de taken uit, beantwoordt de vragen van de bouwers, leest elke diff en draait zelf de tests.
@@ -172,3 +172,8 @@ Gemeenschappelijk per app: `uteq/laravel-feedback-hub` naar `^0.5`; in `resource
 - 2026-10-31 14:11 · proef klaar · advies snapdom 3.7.0; beelden zelf bekeken (sijperda/degoede chromium-montage): klopt
 - 2026-10-31 14:25 · tegenlezer Sonnet 5.5 high · 6 punten verwerkt, 2 niet (reden onder Hergebruik)
 - 2026-11-01 08:11 · akkoord Nathan: plan ja, 1A (snapdom), dev-testpakketten ja
+- 2026-11-01 08:20 · taak 1 · uitgegeven aan gpt-6.1-sol, high · taskId `node:delegated-task:command%3Amcp%3A99c7f4b7-e724-4186-af1d-5f017455d120%3Adelegate-task%3A265e61fc-24c1-45b0-9a69-b49ffc7c0431` · thread `thread:delegated-task:command%3Amcp%3A99c7f4b7-e724-4186-af1d-5f017455d120%3Adelegate-task%3A265e61fc-24c1-45b0-9a69-b49ffc7c0431` · start `2f9c8b8` · opdracht wijkt op één punt af van het plan: README zegt niet meer "stil de placeholder" maar dat een app met een gepubliceerde kopie het oude script houdt tot hij opnieuw publiceert
+- 2026-11-01 08:35 · taak 1 ronde 1 klaar · eigen controle: pest 130 groen (3 skip, stancl), Browser op safari 8 groen, pint groen, snapdom integriteit klopt; beelden sijperda-chromium en degoede-webkit zelf bekeken: scrollpositie, open menu, markering kloppen, wachtwoord- en tokenveld leeg, knop weg. Vite-build van een kopie van De Goede: snapdom eigen stuk 298 KB (99 KB gzip), app.js 3,9 KB gzip
+- 2026-11-01 08:35 · blinde review Sonnet 5.5 high · kleine fout: (1) DPR-test vangt weghalen `dpr: 1` niet, (2) geen scroll/hoge pagina in test, (4) broncontroles in installtest weg · terug naar bouwer als ronde 2. Laat liggen: (3) redactie op het plaatje i.p.v. de kloon controleren, want snapdom tekent de kloon na `afterClone` en een pixeltest is broos; de proefbeelden tonen lege velden. Opmerking "pagina bedienbaar tijdens tekenen" laat ik liggen: tekenen duurt 0,1-1 s en de oude code haalde de blokkade ook al weg vóór de opname
+- 2026-11-01 08:25 · taak 1 ronde 2 klaar · zelf nagekeken: DPR 2, hoge pagina met scroll 400 px, broncontroles terug; mutatieproeven (zonder `dpr: 1`, zonder `clip`) laten de test falen; pest 130 groen (563 asserties), Browser op safari 8 groen, pint groen · goedgekeurd, commit `0f184b3`
+- 2026-11-01 08:28 · eindcontrole · lokale proef zelf opnieuw gedraaid op Sijperda en De Goede (Chromium en WebKit): 0 keer `getDisplayMedia`, 1440×900, 0,6-1,9 s bij een koude browser; externe hosts alleen ui-avatars.com (Sijperda, eigen avatar) en Google Fonts (De Goede laadt Material Symbols zelf in de layout). Firefox niet getest
