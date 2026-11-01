@@ -1,5 +1,6 @@
 window.FeedbackHubInspector = {
     active: false,
+    screenshotTimeout: 10000,
     selectedElement: null,
     highlightOverlay: null,
     interactionBlocker: null,
@@ -211,87 +212,49 @@ window.FeedbackHubInspector = {
     },
 
     async captureScreenshot() {
-        let widget = null;
-        let banner = null;
-        let track = null;
-        let stream = null;
-        let video = null;
-        let originalWidgetVisibility = null;
-        let originalBannerDisplay = null;
+        let timeout;
 
         try {
-            if (!navigator.mediaDevices?.getDisplayMedia) {
-                return this.createPlaceholderScreenshot();
-            }
-
-            // Mark the selection with the body-level overlay, not an inline style on the
-            // element: a Livewire re-render (wire:poll) wipes inline styles while the user
-            // is still in the share picker.
             this.highlightElement(this.selectedElement);
 
-            widget = document.querySelector('[data-feedback-hub-widget]');
-            banner = document.getElementById('feedback-hub-instruction-banner');
+            const redaction = {
+                name: 'feedback-hub-redaction',
+                afterClone({ clone }) {
+                    const sensitive = /password|passwd|token|secret|csrf|authorization|cookie|api_key|apikey/i;
+                    clone.querySelectorAll('input, textarea').forEach((field) => {
+                        if (field.type !== 'password' && !sensitive.test(field.name) && !sensitive.test(field.id)) return;
 
-            if (widget) {
-                originalWidgetVisibility = widget.style.visibility || '';
-                widget.style.visibility = 'hidden';
-            }
+                        field.value = '';
+                        field.setAttribute('value', '');
+                        if (field.tagName === 'TEXTAREA') field.textContent = '';
+                    });
+                },
+            };
 
-            if (banner) {
-                originalBannerDisplay = banner.style.display || '';
-                banner.style.display = 'none';
-            }
+            const capture = async () => {
+                const { snapdom } = await import('./snapdom.mjs');
+                const image = await snapdom.toPng(document.documentElement, {
+                    clip: 'viewport',
+                    scale: 1,
+                    dpr: 1, // Keep CSS-pixel dimensions on retina screens too.
+                    exclude: ['[data-feedback-hub-widget]', '#feedback-hub-instruction-banner', '#feedback-hub-interaction-blocker'],
+                    plugins: [redaction],
+                });
 
-            // Keep this call in the original click activation window. Awaiting before
-            // getDisplayMedia can make Chromium reject the capture request.
-            stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { displaySurface: 'browser' },
-                preferCurrentTab: true,
-                selfBrowserSurface: 'include',
-                systemAudio: 'exclude',
-            });
+                return image.src;
+            };
 
-            track = stream.getVideoTracks()[0];
-            video = document.createElement('video');
-            video.muted = true;
-            video.playsInline = true;
-            video.srcObject = stream;
-            video.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none';
-            document.body.appendChild(video);
-
-            await new Promise((resolve, reject) => {
-                video.onloadedmetadata = resolve;
-                video.onerror = () => reject(new Error('Screenshot video stream kon niet worden geladen.'));
-            });
-            await video.play();
-            // The first frames can still show the OS share picker (a tinted page with its
-            // share bar on top). ponytail: fixed wait; compare frames if it ever shows up again.
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            await new Promise((resolve) => requestAnimationFrame(resolve));
-
-            const canvas = document.createElement('canvas');
-            const settings = track?.getSettings?.() || {};
-            canvas.width = video.videoWidth || settings.width || window.innerWidth;
-            canvas.height = video.videoHeight || settings.height || window.innerHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            return canvas.toDataURL('image/png');
+            return await Promise.race([
+                capture(),
+                new Promise((_, reject) => {
+                    timeout = setTimeout(() => reject(new Error('Screenshot capture timed out.')), this.screenshotTimeout);
+                }),
+            ]);
         } catch (error) {
             console.warn('Feedback screenshot capture failed:', error.message);
-            if (['AbortError', 'NotAllowedError'].includes(error.name)) {
-                return null;
-            }
-
             return this.createPlaceholderScreenshot();
         } finally {
-            if (track) track.stop();
-            if (stream) stream.getTracks().forEach((streamTrack) => streamTrack.stop());
-            if (video) {
-                video.srcObject = null;
-                video.remove();
-            }
-            if (widget) widget.style.visibility = originalWidgetVisibility || '';
-            if (banner) banner.style.display = originalBannerDisplay || '';
+            clearTimeout(timeout);
             this.hideOverlay();
         }
     },

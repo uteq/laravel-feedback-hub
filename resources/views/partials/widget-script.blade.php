@@ -15,7 +15,8 @@
 
     config: { endpoint, chatEndpoint, csrfEndpoint, chatEnabled }.
     The defaults below toggle a `showModal` boolean and toast through window.Flux.toast,
-    falling back to a `feedback-hub:toast` window event.
+    falling back to a cancelable `feedback-hub:toast` window event, followed by
+    `mortel-toast` unless the host calls preventDefault().
 --}}
 @once
     <script>
@@ -57,7 +58,12 @@
                     return;
                 }
 
-                window.dispatchEvent(new CustomEvent('feedback-hub:toast', { detail: { heading, text, variant } }));
+                const detail = { heading, text: text || heading, variant };
+
+                // A host that shows its own toast cancels this event (Alpine: .prevent).
+                if (window.dispatchEvent(new CustomEvent('feedback-hub:toast', { detail, cancelable: true }))) {
+                    window.dispatchEvent(new CustomEvent('mortel-toast', { detail }));
+                }
             },
 
             start() {
