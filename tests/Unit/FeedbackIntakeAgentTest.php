@@ -32,6 +32,16 @@ it('includes page context and asks for goal, expectation and reality', function 
         ->not->toContain('laatste beurt');
 });
 
+it('keeps questions on what the user did and saw, not on how the system works', function (): void {
+    $instructions = (string) (new FeedbackIntakeAgent)->instructions();
+
+    expect($instructions)
+        ->toContain('geen ontwikkelaar')
+        ->toContain('Vraag nooit naar de oorzaak')
+        ->toContain('niet om naar te vragen')
+        ->toContain('Zeg niet dat de melding al verstuurd');
+});
+
 it('pins the reply language to the app locale', function (): void {
     app()->setLocale('nl');
 
