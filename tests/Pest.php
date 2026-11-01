@@ -2,4 +2,4 @@
 
 use Uteq\FeedbackHub\Tests\Support\TestCase;
 
-uses(TestCase::class)->in('Feature', 'Unit');
+uses(TestCase::class)->in('Feature', 'Unit', 'Browser');

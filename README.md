@@ -170,5 +170,29 @@ with its own markup includes the partial, spreads the factory into its own
 ```
 
 By default `openModal()` and `closeModal()` toggle a `showModal` boolean, and
-`notify()` uses `window.Flux.toast` with a `feedback-hub:toast` window event as
-fallback.
+`notify()` uses `window.Flux.toast` when present. Otherwise it dispatches the
+cancelable `feedback-hub:toast` window event, followed by `mortel-toast` unless
+the first event was canceled. A host showing its own toast adds `.prevent`,
+for example `x-on:feedback-hub:toast.window.prevent="..."`.
+
+## Upgrading to 0.5
+
+Screenshots now draw the page without asking for browser permission. A host with
+a published copy keeps the old script (and its browser prompt) until it runs:
+
+```bash
+php artisan vendor:publish --tag=feedback-hub-assets --force
+```
+
+This publishes both the inspector and `snapdom.mjs` beside it. Alternatively,
+import the package script directly, as uteq/os does:
+
+```js
+import '../../vendor/uteq/laravel-feedback-hub/resources/js/feedback-inspector.js';
+```
+
+A host handling `feedback-hub:toast` itself adds `.prevent` to its Alpine listener
+to avoid a second toast from `mortel-toast`.
+
+Only sensitive input fields are blanked in screenshots; text on the page is not;
+cross-origin iframes and images without CORS remain empty.

@@ -38,6 +38,7 @@ class FeedbackHubServiceProvider extends ServiceProvider
 
         $this->publishes([
             __DIR__.'/../resources/js/feedback-inspector.js' => resource_path('js/vendor/feedback-hub/feedback-inspector.js'),
+            __DIR__.'/../resources/js/snapdom.mjs' => resource_path('js/vendor/feedback-hub/snapdom.mjs'),
         ], 'feedback-hub-assets');
 
         if ($this->app->runningInConsole()) {
