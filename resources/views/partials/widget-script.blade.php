@@ -24,7 +24,7 @@
     <script>
         window.FeedbackHubWidget = (config) => {
         // Native media objects stay outside Alpine's reactive proxy: a proxied MediaRecorder or Blob breaks.
-        const media = { recorder: null, streams: [], chunks: [], timer: null, video: null, discard: false, leaveGuard: null };
+        const media = { recorder: null, streams: [], chunks: [], timer: null, video: null, discard: false, leaveGuard: null, crop: null };
         const video = config.video || {};
 
         return {
@@ -185,8 +185,9 @@
                 }
 
                 media.streams = [display, microphone].filter(Boolean);
+                media.crop = await this.cropToPage(display);
                 const audio = microphone ? microphone.getAudioTracks() : [];
-                const stream = new MediaStream([...display.getVideoTracks(), ...audio]);
+                const stream = new MediaStream([...(media.crop ? [media.crop.track] : display.getVideoTracks()), ...audio]);
                 const types = audio.length
                     ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
                     : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
@@ -270,7 +271,78 @@
                 this.formState = inspector.collectFormState?.() || null;
             },
 
+            // Firefox cannot share a single tab: it records a window or a screen, side panel and tab titles included.
+            // Firefox does say where the page sits on screen (mozInnerScreenX/Y), so the recording is cut to the page.
+            // When the shared surface does not match this window or screen (another window), it stays as it is.
+            async cropToPage(display) {
+                const track = display.getVideoTracks()[0];
+                if (typeof window.mozInnerScreenX !== 'number' || !track || track.getSettings?.().displaySurface === 'browser') return null;
+
+                const source = document.createElement('video');
+                source.muted = true;
+                source.playsInline = true;
+                source.srcObject = display;
+                await source.play().catch(() => {});
+                if (!source.videoWidth) {
+                    await new Promise((resolve) => { source.onloadedmetadata = resolve; setTimeout(resolve, 1500); });
+                }
+
+                const first = this.pageRegion(source.videoWidth, source.videoHeight);
+                if (!first) {
+                    source.srcObject = null;
+                    return null;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(first.width);
+                canvas.height = Math.round(first.height);
+                const context = canvas.getContext('2d');
+                const draw = () => {
+                    const region = this.pageRegion(source.videoWidth, source.videoHeight) || first;
+                    context.drawImage(source, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height);
+                };
+                draw();
+                const timer = setInterval(draw, 1000 / 15);
+                const stream = canvas.captureStream(15);
+
+                return {
+                    track: stream.getVideoTracks()[0],
+                    stop() {
+                        clearInterval(timer);
+                        stream.getTracks().forEach((cropped) => cropped.stop());
+                        source.srcObject = null;
+                    },
+                };
+            },
+
+            // Where the page sits in a recorded frame of this window, or of the screen it is on; null when neither fits.
+            pageRegion(frameWidth, frameHeight) {
+                if (!frameWidth || !frameHeight) return null;
+
+                const surfaces = [
+                    { width: window.outerWidth, height: window.outerHeight, left: window.screenX, top: window.screenY },
+                    { width: window.screen.width, height: window.screen.height, left: window.screen.left || 0, top: window.screen.top || 0 },
+                ];
+
+                for (const surface of surfaces) {
+                    const scale = frameWidth / surface.width;
+                    if (!scale || Math.abs(surface.height * scale - frameHeight) > Math.max(4, frameHeight * 0.03)) continue;
+
+                    const x = (window.mozInnerScreenX - surface.left) * scale;
+                    const y = (window.mozInnerScreenY - surface.top) * scale;
+                    const width = window.innerWidth * scale;
+                    const height = window.innerHeight * scale;
+                    if (x < 0 || y < 0 || x + width > frameWidth + 2 || y + height > frameHeight + 2) continue;
+
+                    return { x, y, width: Math.min(width, frameWidth - x), height: Math.min(height, frameHeight - y) };
+                }
+
+                return null;
+            },
+
             stopStreams() {
+                media.crop?.stop();
+                media.crop = null;
                 media.streams.forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
                 media.streams = [];
             },

@@ -35,9 +35,27 @@ beforeEach(function (): void {
                     return window.displayStream;
                 };
                 const media = '{$media}';
+                // Firefox records a whole window or screen; mozInnerScreenX/Y tell where the page sits in it.
+                // Here: a 1000x700 window with a 200px side panel and a 100px toolbar (red) around an 800x600 page (green).
+                if (media.startsWith('firefox')) {
+                    const geometry = { mozInnerScreenX: 200, mozInnerScreenY: 100, screenX: 0, screenY: 0, outerWidth: 1000, outerHeight: 700, innerWidth: 800, innerHeight: 600 };
+                    Object.entries(geometry).forEach(([key, value]) => Object.defineProperty(window, key, { configurable: true, get: () => value }));
+                }
+                const firefoxStream = (width, height) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width; canvas.height = height;
+                    const context = canvas.getContext('2d');
+                    window.paint = setInterval(() => {
+                        context.fillStyle = 'rgb(220, 30, 30)'; context.fillRect(0, 0, width, height);
+                        context.fillStyle = 'rgb(30, 200, 60)'; context.fillRect(200, 100, 800, 600);
+                    }, 40);
+                    window.displayStream = canvas.captureStream(15);
+                    return window.displayStream;
+                };
+                const displayFor = () => media === 'firefox-window' ? firefoxStream(1000, 700) : (media === 'firefox-other' ? firefoxStream(640, 480) : canvasStream());
                 if (media !== 'none') {
                     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
-                        getDisplayMedia() { window.mediaCalls.display++; return media === 'denied' ? Promise.reject(new DOMException('Permission denied', 'NotAllowedError')) : Promise.resolve(canvasStream()); },
+                        getDisplayMedia() { window.mediaCalls.display++; return media === 'denied' ? Promise.reject(new DOMException('Permission denied', 'NotAllowedError')) : Promise.resolve(displayFor()); },
                         getUserMedia() { window.mediaCalls.mic++; return Promise.reject(new DOMException('Permission denied', 'NotAllowedError')); },
                     } });
                 } else {
@@ -187,7 +205,7 @@ it('lets the person remove the recording before sending', function (): void {
     $page->script('new Promise(resolve => setTimeout(resolve, 600))');
     $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
         ->assertScript('!!document.querySelector(".fh-modal video")?.src')
-        ->click('button:has-text("Video weghalen")')
+        ->click('button:has-text("Video verwijderen")')
         ->assertNotPresent('.fh-modal video')
         ->fill('#feedback-hub-title', 'Toch zonder video')
         ->click('button:has-text("Versturen")')
@@ -218,4 +236,55 @@ it('offers to record again from the review', function (): void {
         ->click('button:has-text("Opnieuw opnemen")')
         ->assertVisible('[data-feedback-hub-recording]')
         ->assertScript('window.mediaCalls.display', 2);
+});
+
+/** Size and two pixel colours (corner and centre) of a frame of the recording in the review. */
+function recordedFrame(mixed $page): array
+{
+    return $page->script(<<<'JS'
+        new Promise(async (resolve) => {
+            const video = document.createElement('video');
+            video.muted = true;
+            video.src = document.querySelector('.fh-modal video').src;
+            await new Promise(done => { video.onloadeddata = done; });
+            video.currentTime = 0.3;
+            await new Promise(done => { video.onseeked = done; setTimeout(done, 1000); });
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0);
+            const pixel = (x, y) => [...context.getImageData(x, y, 1, 1).data.slice(0, 3)];
+            resolve({ width: video.videoWidth, height: video.videoHeight, corner: pixel(8, 8), centre: pixel(canvas.width / 2, canvas.height / 2) });
+        })
+        JS);
+}
+
+it('records only the page when Firefox shares the whole window', function (): void {
+    $page = videoFeedbackPage('firefox-window');
+    startVideo($page);
+    $page->script('new Promise(resolve => setTimeout(resolve, 900))');
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
+        ->assertScript('!!document.querySelector(".fh-modal video")?.src');
+
+    $frame = recordedFrame($page);
+
+    expect($frame['width'])->toBe(800)
+        ->and($frame['height'])->toBe(600)
+        ->and($frame['corner'][1])->toBeGreaterThan(150)
+        ->and($frame['corner'][0])->toBeLessThan(100)
+        ->and($frame['centre'][1])->toBeGreaterThan(150);
+    $page->assertScript('window.displayStream.getTracks().every(track => track.readyState === "ended")');
+});
+
+it('keeps the recording as it is when it does not match the window or screen', function (): void {
+    $page = videoFeedbackPage('firefox-other');
+    startVideo($page);
+    $page->script('new Promise(resolve => setTimeout(resolve, 900))');
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
+        ->assertScript('!!document.querySelector(".fh-modal video")?.src');
+
+    $frame = recordedFrame($page);
+
+    expect($frame['width'])->toBe(640)
+        ->and($frame['height'])->toBe(480);
 });

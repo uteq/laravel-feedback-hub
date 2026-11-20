@@ -42,8 +42,7 @@
             .fh-chat-form .fh-input { flex: 1 1 auto; min-width: 0; }
             .fh-record-dot { width: 10px; height: 10px; border-radius: 999px; background: #dc2626; }
             .fh-video { display: block; max-height: 260px; width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; background: #0f172a; }
-            .fh-video-actions { display: flex; gap: 16px; margin-top: 6px; }
-            .fh-link { padding: 6px 0; }
+            .fh-video-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
             .fh-choice { position: fixed; right: 24px; bottom: 92px; z-index: 55; display: flex; flex-direction: column; gap: 4px; width: 260px; border: 1px solid rgba(15, 23, 42, .12); border-radius: 12px; background: white; padding: 6px; box-shadow: 0 20px 48px rgba(15, 23, 42, .2); }
             .fh-choice-option { display: flex; align-items: flex-start; gap: 12px; border: 0; border-radius: 8px; background: transparent; padding: 10px 12px; color: #172026; text-align: left; font: inherit; cursor: pointer; }
             .fh-choice-option:hover, .fh-choice-option:focus-visible { background: #edf7f8; outline: none; }
@@ -123,8 +122,14 @@
                             <label class="fh-label">Video</label>
                             <video class="fh-video" :src="videoUrl" controls playsinline></video>
                             <div class="fh-video-actions">
-                                <button type="button" class="fh-secondary fh-link" x-on:click="startRecording">Opnieuw opnemen</button>
-                                <button type="button" class="fh-secondary fh-link" x-on:click="removeVideo">Video weghalen</button>
+                                <button type="button" class="fh-type" x-on:click="startRecording">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v4.5h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                    Opnieuw opnemen
+                                </button>
+                                <button type="button" class="fh-type" x-on:click="removeVideo">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                    Video verwijderen
+                                </button>
                             </div>
                         </div>
                     </template>
