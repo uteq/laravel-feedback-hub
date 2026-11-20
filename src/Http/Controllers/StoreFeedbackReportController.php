@@ -82,10 +82,22 @@ class StoreFeedbackReportController extends Controller
             'element_rect' => ['nullable', 'array'],
             'screenshot' => ['nullable', 'string'],
             'video_upload' => ['nullable', 'uuid'],
-            'activity' => ['nullable', 'array', 'max:500'],
+            'activity' => ['nullable', 'array', 'max:500', function (string $attribute, mixed $value, \Closure $fail): void {
+                if (! is_array($value)) {
+                    return;
+                }
+
+                foreach (array_values($value) as $index => $entry) {
+                    if (is_array($entry) && ($entry['type'] ?? null) === 'start' && $index !== 0) {
+                        $fail('A recording start must be the first activity entry.');
+
+                        break;
+                    }
+                }
+            }],
             'activity.*' => ['array:t,type,label,selector,path'],
             'activity.*.t' => ['required', 'numeric', 'min:0'],
-            'activity.*.type' => ['required', Rule::in(['click', 'navigate'])],
+            'activity.*.type' => ['required', Rule::in(['start', 'click', 'navigate'])],
             'activity.*.label' => ['present', 'nullable', 'string', 'max:60'],
             'activity.*.selector' => ['present', 'nullable', 'string', 'max:200'],
             'activity.*.path' => ['required', 'string', 'max:500'],

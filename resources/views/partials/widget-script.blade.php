@@ -377,8 +377,13 @@
 
             startActivity() {
                 this.stopActivity?.();
-                this.activity = [];
                 media.startedAt = performance.now();
+                this.activity = [{
+                    t: 0, type: 'start',
+                    label: this.redactText(document.title).slice(0, 60),
+                    selector: '',
+                    path: this.redactText(location.pathname).slice(0, 500),
+                }];
                 let lastUrl = location.href;
                 let active = true;
                 const append = (type, el) => {

@@ -45,3 +45,31 @@ it('rejects unbounded or unknown activity data', function (string $field, mixed 
 it('still requires a title without any new attributes', function (): void {
     $this->postJson(route('feedback-hub.store'), ['type' => 'bug', 'url' => 'https://example.test'])->assertJsonValidationErrors('title');
 });
+
+it('accepts and sanitizes a first recording start entry', function (): void {
+    $start = ['t' => 0, 'type' => 'start', 'label' => 'Page token=secret', 'selector' => '', 'path' => '/original?private=value#fragment'];
+    $payload = activityPayload();
+    array_unshift($payload['activity'], $start);
+    $this->postJson(route('feedback-hub.store'), $payload)->assertCreated();
+    // Preserve Laravel's existing conversion of empty nullable strings to null.
+    expect(FeedbackReport::query()->sole()->activity[0])->toBe([
+        't' => 0, 'type' => 'start', 'label' => 'Page token=[filtered]', 'selector' => null, 'path' => '/original',
+    ]);
+});
+
+it('rejects a misplaced or repeated recording start entry', function (array $types): void {
+    $activity = array_map(fn (string $type): array => [
+        't' => 0, 'type' => $type, 'label' => 'Page', 'selector' => '', 'path' => '/original',
+    ], $types);
+    $this->postJson(route('feedback-hub.store'), activityPayload(['activity' => $activity]))
+        ->assertUnprocessable()->assertJsonValidationErrors('activity');
+})->with([
+    [['click', 'start']],
+    [['start', 'start']],
+    [['start', 'navigate', 'start']],
+]);
+
+it('still accepts legacy activity with no start entry', function (): void {
+    $this->postJson(route('feedback-hub.store'), activityPayload())->assertCreated();
+    expect(array_column(FeedbackReport::query()->sole()->activity, 'type'))->toBe(['click']);
+});

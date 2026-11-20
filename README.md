@@ -321,7 +321,15 @@ The new migration adds nullable `activity` (JSON, array cast) and
 {"t":1.2,"type":"click","label":"Save","selector":"#save","path":"/deliveries"}
 ```
 
-Types are `click` and `navigate` (history changes and Livewire navigation).
+Each new recording begins with a `start` entry:
+`{"t":0,"type":"start","label":"Page title","selector":"","path":"/deliveries"}`.
+It preserves the starting page even when navigation (including Back) happens
+before the first click. Its label is the redacted document title, limited to
+60 characters. A `start` entry is optional for compatibility with older clients;
+when supplied, it must be first and may occur at most once. It counts toward the
+500-entry limit.
+
+Other types are `click` and `navigate` (history changes and Livewire navigation).
 Times are seconds since recording started, rounded to one decimal. Labels use
 control text, aria-label or a field label, never field values (max 60 characters).
 Selectors are limited to 200 characters and paths to 500, without query or hash.

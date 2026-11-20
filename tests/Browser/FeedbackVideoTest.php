@@ -398,3 +398,27 @@ it('announces a sent report after closing during the chunk upload and follows up
         ->assertNotPresent('.fh-modal:visible');
     $page->assertScript('window.followRequests[0]', ['report' => FeedbackReport::query()->sole()->uuid]);
 });
+
+it('records the starting page before navigation and Back without any click', function (): void {
+    $page = videoFeedbackPage();
+    $page->script("document.title = 'Begin token=secret ' + 'x'.repeat(100); window.expectedStartTitle = ('Begin token=[filtered] ' + 'x'.repeat(100)).slice(0,60)");
+    startVideo($page)->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity.length", 1)
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity[0].t", 0)
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity[0].type", 'start')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity[0].selector", '')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity[0].path", '/_fhv/first/canvas')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity[0].label === window.expectedStartTitle", true);
+    $page->script("history.pushState({}, '', '/_fhv/before-click?private=value'); history.back()");
+    $page->assertScript('location.pathname', '/_fhv/first/canvas')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity.map(e=>e.type)", ['start', 'navigate', 'navigate'])
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity.map(e=>e.path)", ['/_fhv/first/canvas', '/_fhv/before-click', '/_fhv/first/canvas']);
+    // Let the canvas media fixture produce frames before the recording is stopped.
+    $page->script('new Promise(resolve => setTimeout(resolve, 600))');
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')->assertVisible('.fh-video')
+        ->fill('#feedback-hub-title', 'Startpagina')->click('button:has-text("Versturen")')
+        ->assertNotPresent('.fh-modal:visible');
+    $report = FeedbackReport::query()->sole();
+    expect(array_column($report->activity, 'type'))->toBe(['start', 'navigate', 'navigate'])
+        ->and($report->activity[0]['path'])->toBe('/_fhv/first/canvas')
+        ->and($report->activity[0]['label'])->toHaveLength(60);
+});
