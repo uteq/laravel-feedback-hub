@@ -206,7 +206,7 @@
                     <button type="button" class="fh-secondary" x-on:click="close">Annuleren</button>
                     <button type="button" class="fh-primary" x-show="mode !== 'chat'" x-on:click="submit" :disabled="submitting || !title">
                         <span x-show="!submitting">Versturen</span>
-                        <span x-show="submitting">Bezig...</span>
+                        <span x-show="submitting" data-feedback-hub-submit-label x-text="uploadProgress === null ? 'Bezig...' : `Video versturen ${uploadProgress}%`"></span>
                     </button>
                 </footer>
             </section>

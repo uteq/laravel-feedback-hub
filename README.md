@@ -129,6 +129,10 @@ stay out; a surface that matches neither stays uncut. The person watches the rec
 or delete it, and sends it. The microphone is
 optional: without permission the recording has no sound.
 
+A long recording (say 30 minutes, set `FEEDBACK_HUB_VIDEO_MAX_SECONDS=1800` and raise
+`FEEDBACK_HUB_VIDEO_MAX_KILOBYTES` to about 256000) is hundreds of chunks: the widget shows
+"Video versturen 45%" and retries a chunk up to five times on a network error, 429 or 5xx.
+
 The recording travels in raw chunks (`POST feedback-hub/video/chunks?offset=…`, default 512 KB), so
 nginx's default 1 MB body limit and PHP's `upload_max_filesize` never apply. Chunks are staged per user in
 `storage/app/feedback-hub/video-uploads`; the report moves the finished file to the storage disk after a

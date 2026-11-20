@@ -181,3 +181,9 @@ it('leaves reports without a recording unchanged in the issue body', function ()
     expect(app(IssueBodyBuilder::class)->build($report))->not->toContain('**Video:**')
         ->and(app(IssueBodyBuilder::class)->telegramMessage($report))->not->toContain('schermopname');
 });
+
+it('lets enough chunks through for a long recording', function (): void {
+    $middleware = app('router')->getRoutes()->getByName('feedback-hub.video-chunk')->gatherMiddleware();
+
+    expect($middleware)->toContain('throttle:1200,1');
+});

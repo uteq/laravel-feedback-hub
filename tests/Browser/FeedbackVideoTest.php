@@ -24,7 +24,17 @@ beforeEach(function (): void {
                 window.mediaCalls = { display: 0, mic: 0 };
                 window.chunkRequests = 0;
                 const realFetch = window.fetch;
-                window.fetch = (url, options) => { if (String(url).includes('/video/chunks')) window.chunkRequests++; return realFetch(url, options); };
+                window.failChunks = 0;
+                window.chunkProgress = [];
+                window.fetch = (url, options) => {
+                    if (String(url).includes('/video/chunks')) {
+                        window.chunkRequests++;
+                        const label = document.querySelector('[data-feedback-hub-submit-label]')?.textContent;
+                        if (label) window.chunkProgress.push(label.trim());
+                        if (window.failChunks > 0) { window.failChunks--; return Promise.resolve(new Response('{}', { status: 503, headers: { 'Content-Type': 'application/json' } })); }
+                    }
+                    return realFetch(url, options);
+                };
                 const canvasStream = () => {
                     const canvas = document.createElement('canvas');
                     canvas.width = 160; canvas.height = 90;
@@ -287,4 +297,23 @@ it('keeps the recording as it is when it does not match the window or screen', f
 
     expect($frame['width'])->toBe(640)
         ->and($frame['height'])->toBe(480);
+});
+
+it('retries a failed piece and shows how far sending is', function (): void {
+    $page = videoFeedbackPage();
+    startVideo($page);
+    $page->script('new Promise(resolve => setTimeout(resolve, 1200))');
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
+        ->assertScript('!!document.querySelector(".fh-modal video")?.src');
+
+    $page->script('window.failChunks = 2;');
+    $page->fill('#feedback-hub-title', 'Lang proces')
+        ->click('button:has-text("Versturen")')
+        ->assertScript('document.querySelector(".fh-backdrop").style.display === "none"');
+
+    $page->assertScript('window.chunkProgress.some(label => /^Video versturen \\d+%$/.test(label))');
+
+    $report = FeedbackReport::query()->sole();
+    expect($report->video_size)->toBeGreaterThan(1024);
+    Storage::disk('local')->assertExists($report->video_path);
 });

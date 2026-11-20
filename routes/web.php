@@ -16,7 +16,7 @@ Route::prefix(config('feedback-hub.route_prefix', 'feedback-hub'))
     ->group(function (): void {
         Route::post('/', config('feedback-hub.store_controller', StoreFeedbackReportController::class))->name('store');
         Route::post('/chat', FeedbackChatController::class)->middleware('throttle:30,1')->name('chat');
-        Route::post('/video/chunks', StoreFeedbackVideoChunkController::class)->middleware('throttle:240,1')->name('video-chunk');
+        Route::post('/video/chunks', StoreFeedbackVideoChunkController::class)->middleware('throttle:1200,1')->name('video-chunk');
 
         // Two segments, so it never collides with the hub's GET /{report} admin route.
         Route::get('/session/csrf', FeedbackCsrfTokenController::class)->middleware('throttle:30,1')->name('csrf');

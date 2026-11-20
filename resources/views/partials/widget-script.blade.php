@@ -57,6 +57,7 @@
             showChoice: false,
             recording: false,
             recordingSeconds: 0,
+            uploadProgress: null,
             videoUrl: null,
 
             openModal() {
@@ -359,13 +360,27 @@
                 let upload = null;
                 let offset = 0;
                 let conflicts = 0;
+                let failures = 0;
+                this.uploadProgress = 0;
 
                 while (offset < blob.size) {
                     const url = new URL(this.videoChunkEndpoint, window.location.href);
                     if (upload) url.searchParams.set('upload', upload);
                     url.searchParams.set('offset', String(offset));
 
-                    const response = await this.post(url.toString(), blob.slice(offset, offset + this.videoChunkBytes), { 'Content-Type': 'application/octet-stream' });
+                    // A long recording is hundreds of pieces: a network hiccup or a busy server retries the piece, not the video.
+                    let response;
+                    try {
+                        response = await this.post(url.toString(), blob.slice(offset, offset + this.videoChunkBytes), { 'Content-Type': 'application/octet-stream' });
+                    } catch (error) {
+                        response = null;
+                    }
+                    if ((!response || response.status >= 500 || response.status === 429) && failures++ < 5) {
+                        await new Promise((resolve) => setTimeout(resolve, Math.min(8000, 500 * 2 ** failures)));
+                        continue;
+                    }
+                    if (!response) throw new Error('De video kon niet worden verstuurd. Probeer het opnieuw, of verwijder de video.');
+
                     const data = await response.json().catch(() => ({}));
 
                     if (this.sessionEnded(response)) throw new Error(this.sessionMessage);
@@ -379,12 +394,15 @@
 
                     if (!response.ok) {
                         throw new Error(response.status === 413
-                            ? 'De video is te groot. Neem een kortere video op, of haal hem weg.'
-                            : 'De video kon niet worden verstuurd. Probeer het opnieuw, of haal de video weg.');
+                            ? 'De video is te groot. Neem een kortere video op, of verwijder hem.'
+                            : 'De video kon niet worden verstuurd. Probeer het opnieuw, of verwijder de video.');
                     }
 
                     upload = data.upload;
                     offset = data.offset;
+                    failures = 0;
+                    conflicts = 0;
+                    this.uploadProgress = Math.min(100, Math.round((offset / blob.size) * 100));
                 }
 
                 return upload;
@@ -520,6 +538,7 @@
                     this.error = error.message || 'Probeer het opnieuw';
                     this.notify('Er ging iets mis', this.error, 'danger');
                 } finally {
+                    this.uploadProgress = null;
                     this.submitting = false;
                 }
             },
