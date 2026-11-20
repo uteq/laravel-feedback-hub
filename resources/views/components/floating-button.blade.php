@@ -1,6 +1,12 @@
 @props(['floating' => true])
 
 @php($chatEnabled = \Uteq\FeedbackHub\Support\FeedbackAiAvailability::available())
+@php($video = [
+    'enabled' => (bool) config('feedback-hub.video.enabled', true),
+    'chunkEndpoint' => route('feedback-hub.video-chunk'),
+    'chunkBytes' => max(1, (int) config('feedback-hub.video.chunk_kilobytes', 512)) * 1024,
+    'maxSeconds' => max(1, (int) config('feedback-hub.video.max_seconds', 120)),
+])
 
 @auth
     @once
@@ -34,6 +40,15 @@
             .fh-bubble.is-busy { color: #64748b; font-style: italic; }
             .fh-chat-form { display: flex; align-items: center; gap: 8px; }
             .fh-chat-form .fh-input { flex: 1 1 auto; min-width: 0; }
+            .fh-record { display: inline-flex; align-items: center; gap: 8px; }
+            .fh-record-dot { width: 10px; height: 10px; border-radius: 999px; background: #dc2626; }
+            .fh-hint { margin: 7px 0 0; color: #64748b; font-size: 13px; line-height: 1.4; }
+            .fh-video { display: block; max-height: 260px; width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; background: #0f172a; }
+            .fh-link { margin-top: 6px; padding: 6px 0; }
+            .fh-recording { position: fixed; left: 50%; bottom: 24px; z-index: 70; display: flex; align-items: center; gap: 12px; transform: translateX(-50%); border-radius: 999px; background: #172026; color: white; padding: 8px 8px 8px 16px; box-shadow: 0 16px 34px rgba(15, 23, 42, .3); font-size: 14px; font-variant-numeric: tabular-nums; }
+            .fh-recording .fh-record-dot { animation: fh-pulse 1.2s ease-in-out infinite; }
+            .fh-stop { border: 0; border-radius: 999px; background: white; color: #172026; padding: 7px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+            @keyframes fh-pulse { 50% { opacity: .35; } }
             .fh-error { margin: 0; color: #b91c1c; font-size: 13px; line-height: 1.4; }
             @media (max-width: 480px) {
                 .fh-backdrop { padding: 12px; }
@@ -52,14 +67,14 @@
     @endonce
 
     <div
-        x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')), chatEndpoint: @js(route('feedback-hub.chat'), JSON_UNESCAPED_SLASHES), csrfEndpoint: @js(route('feedback-hub.csrf'), JSON_UNESCAPED_SLASHES), chatEnabled: {{ $chatEnabled ? 'true' : 'false' }} })"
+        x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')), chatEndpoint: @js(route('feedback-hub.chat'), JSON_UNESCAPED_SLASHES), csrfEndpoint: @js(route('feedback-hub.csrf'), JSON_UNESCAPED_SLASHES), chatEnabled: {{ $chatEnabled ? 'true' : 'false' }}, video: @js($video, JSON_UNESCAPED_SLASHES) })"
         x-on:feedback-hub-captured.window="handleCapture($event.detail)"
         x-on:feedback-hub-screenshot-captured.window="handleScreenshot($event.detail)"
         x-on:open-feedback-hub.window="start"
         data-feedback-hub-widget
     >
         @if ($floating)
-            <button type="button" class="fh-button" x-on:click="start" x-show="!showModal" aria-label="Feedback geven">
+            <button type="button" class="fh-button" x-on:click="start" x-show="!showModal && !recording" aria-label="Feedback geven">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M4 13.5V10a3 3 0 0 1 3-3h3l6-3v16l-6-3H7a3 3 0 0 1-3-3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
                     <path d="M8 17v2.2c0 .8.6 1.4 1.4 1.4h.8c.8 0 1.4-.6 1.4-1.4V18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -67,6 +82,12 @@
                 </svg>
             </button>
         @endif
+
+        <div class="fh-recording" x-cloak x-show="recording" role="status" data-feedback-hub-recording>
+            <span class="fh-record-dot" aria-hidden="true"></span>
+            <span>Opname loopt <span x-text="recordingClock()"></span></span>
+            <button type="button" class="fh-stop" x-on:click="stopRecording">Stop</button>
+        </div>
 
         <div class="fh-backdrop" x-cloak x-show="showModal" x-transition.opacity x-on:click.self="close" x-on:keydown.escape.window="close">
             <section class="fh-modal" x-show="showModal" x-transition x-on:click.stop role="dialog" aria-modal="true" aria-labelledby="feedback-hub-heading">
@@ -76,6 +97,24 @@
                 </header>
 
                 <div class="fh-body">
+                    <template x-if="videoUrl || canRecordVideo()">
+                        <div class="fh-field">
+                            <label class="fh-label">Video</label>
+                            <template x-if="videoUrl">
+                                <div>
+                                    <video class="fh-video" :src="videoUrl" controls playsinline></video>
+                                    <button type="button" class="fh-secondary fh-link" x-on:click="removeVideo">Video weghalen</button>
+                                </div>
+                            </template>
+                            <template x-if="!videoUrl">
+                                <div>
+                                    <button type="button" class="fh-type fh-record" x-on:click="startRecording"><span class="fh-record-dot" aria-hidden="true"></span>Neem je scherm op</button>
+                                    <p class="fh-hint">Laat zien wat er gebeurt en vertel het erbij. Je browser vraagt eerst toestemming. Hooguit <span x-text="videoLimitLabel()"></span>.</p>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
                     <div class="fh-field" x-show="screenshot">
                         <label class="fh-label">Screenshot</label>
                         <img class="fh-shot" :src="screenshot" alt="Feedback screenshot">

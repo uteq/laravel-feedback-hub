@@ -13,14 +13,21 @@
             }));
         });
 
-    config: { endpoint, chatEndpoint, csrfEndpoint, chatEnabled }.
+    config: { endpoint, chatEndpoint, csrfEndpoint, chatEnabled, video: { enabled, chunkEndpoint, chunkBytes, maxSeconds } }.
+    The screen recording (startRecording/stopRecording) hides the modal while it records and opens it again
+    afterwards; a recording travels in chunks to video.chunkEndpoint before the report is sent.
     The defaults below toggle a `showModal` boolean and toast through window.Flux.toast,
     falling back to a cancelable `feedback-hub:toast` window event, followed by
     `mortel-toast` unless the host calls preventDefault().
 --}}
 @once
     <script>
-        window.FeedbackHubWidget = (config) => ({
+        window.FeedbackHubWidget = (config) => {
+        // Native media objects stay outside Alpine's reactive proxy: a proxied MediaRecorder or Blob breaks.
+        const media = { recorder: null, streams: [], chunks: [], timer: null, video: null, discard: false };
+        const video = config.video || {};
+
+        return {
             endpoint: config.endpoint,
             chatEndpoint: config.chatEndpoint,
             csrfEndpoint: config.csrfEndpoint,
@@ -43,6 +50,13 @@
             consoleErrors: [],
             networkRequests: [],
             formState: null,
+            videoEnabled: Boolean(video.enabled),
+            videoChunkEndpoint: video.chunkEndpoint,
+            videoChunkBytes: Number(video.chunkBytes) || 512 * 1024,
+            videoMaxSeconds: Number(video.maxSeconds) || 120,
+            recording: false,
+            recordingSeconds: 0,
+            videoUrl: null,
 
             openModal() {
                 this.showModal = true;
@@ -99,7 +113,179 @@
                 }
             },
 
+            canRecordVideo() {
+                return this.videoEnabled
+                    && Boolean(this.videoChunkEndpoint)
+                    && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+                    && typeof window.MediaRecorder === 'function';
+            },
+
+            videoLimitLabel() {
+                const seconds = this.videoMaxSeconds;
+
+                return seconds % 60 === 0 && seconds >= 120 ? `${seconds / 60} minuten` : `${seconds} seconden`;
+            },
+
+            recordingClock() {
+                const seconds = this.recordingSeconds;
+
+                return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+            },
+
+            recordingUnavailableMessage: 'Opnemen is niet gelukt. Je kunt je feedback ook zonder video sturen.',
+
+            async startRecording() {
+                if (this.recording || !this.canRecordVideo()) return;
+
+                this.error = '';
+                this.removeVideo();
+                this.closeModal();
+
+                let display;
+                try {
+                    display = await navigator.mediaDevices.getDisplayMedia({
+                        video: { frameRate: 15 },
+                        audio: false,
+                        preferCurrentTab: true,
+                        selfBrowserSurface: 'include',
+                        surfaceSwitching: 'exclude',
+                    });
+                } catch (error) {
+                    this.error = this.recordingUnavailableMessage;
+                    this.openModal();
+                    return;
+                }
+
+                // The voice is optional: without a microphone (or permission) the recording simply has no sound.
+                let microphone = null;
+                try {
+                    microphone = await navigator.mediaDevices.getUserMedia?.({ audio: true }) || null;
+                } catch (error) {
+                    microphone = null;
+                }
+
+                media.streams = [display, microphone].filter(Boolean);
+                const audio = microphone ? microphone.getAudioTracks() : [];
+                const stream = new MediaStream([...display.getVideoTracks(), ...audio]);
+                const types = audio.length
+                    ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+                    : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+                const mimeType = types.find((type) => MediaRecorder.isTypeSupported(type));
+
+                let recorder;
+                try {
+                    recorder = new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 800000, audioBitsPerSecond: 64000 });
+                } catch (error) {
+                    this.stopStreams();
+                    this.error = this.recordingUnavailableMessage;
+                    this.openModal();
+                    return;
+                }
+
+                media.recorder = recorder;
+                media.chunks = [];
+                media.discard = false;
+                recorder.ondataavailable = (event) => { if (event.data?.size) media.chunks.push(event.data); };
+                recorder.onstop = () => this.finishRecording(recorder.mimeType || mimeType || 'video/webm');
+
+                // "Stop sharing" in the browser bar ends the video track; treat it as pressing Stop.
+                display.getVideoTracks().forEach((track) => track.addEventListener('ended', () => this.stopRecording(), { once: true }));
+
+                this.recordingSeconds = 0;
+                this.recording = true;
+                recorder.start(1000);
+                media.timer = setInterval(() => {
+                    this.recordingSeconds++;
+                    if (this.recordingSeconds >= this.videoMaxSeconds) this.stopRecording();
+                }, 1000);
+            },
+
+            stopRecording() {
+                if (media.recorder && media.recorder.state !== 'inactive') {
+                    media.recorder.stop();
+                }
+            },
+
+            finishRecording(type) {
+                clearInterval(media.timer);
+                media.timer = null;
+                media.recorder = null;
+                this.stopStreams();
+                this.recording = false;
+
+                const chunks = media.chunks;
+                media.chunks = [];
+
+                if (media.discard) {
+                    media.discard = false;
+                    return;
+                }
+
+                const blob = new Blob(chunks, { type: String(type).split(';')[0] || 'video/webm' });
+                if (blob.size > 0) {
+                    media.video = blob;
+                    this.videoUrl = URL.createObjectURL(blob);
+                } else {
+                    this.error = this.recordingUnavailableMessage;
+                }
+
+                this.openModal();
+            },
+
+            stopStreams() {
+                media.streams.forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
+                media.streams = [];
+            },
+
+            removeVideo() {
+                if (this.videoUrl) URL.revokeObjectURL(this.videoUrl);
+                this.videoUrl = null;
+                media.video = null;
+            },
+
+            // Sends the recording in pieces that stay under the usual upload limits; returns the upload id.
+            async uploadVideo() {
+                const blob = media.video;
+                let upload = null;
+                let offset = 0;
+                let conflicts = 0;
+
+                while (offset < blob.size) {
+                    const url = new URL(this.videoChunkEndpoint, window.location.href);
+                    if (upload) url.searchParams.set('upload', upload);
+                    url.searchParams.set('offset', String(offset));
+
+                    const response = await this.post(url.toString(), blob.slice(offset, offset + this.videoChunkBytes), { 'Content-Type': 'application/octet-stream' });
+                    const data = await response.json().catch(() => ({}));
+
+                    if (this.sessionEnded(response)) throw new Error(this.sessionMessage);
+
+                    // The server tells where the upload stands; continue from there (a retried piece is not added twice).
+                    if (response.status === 409 && Number.isInteger(data.offset) && conflicts++ < 3) {
+                        upload = data.upload || upload;
+                        offset = data.offset;
+                        continue;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(response.status === 413
+                            ? 'De video is te groot. Neem een kortere video op, of haal hem weg.'
+                            : 'De video kon niet worden verstuurd. Probeer het opnieuw, of haal de video weg.');
+                    }
+
+                    upload = data.upload;
+                    offset = data.offset;
+                }
+
+                return upload;
+            },
+
             reset() {
+                if (this.recording) {
+                    media.discard = true;
+                    this.stopRecording();
+                }
+                this.removeVideo();
                 this.error = '';
                 this.type = 'bug';
                 this.title = '';
@@ -189,6 +375,7 @@
                 this.submitting = true;
 
                 try {
+                    const videoUpload = media.video ? await this.uploadVideo() : null;
                     const payload = this.redactPayload({
                         type: this.type,
                         title: this.title,
@@ -204,6 +391,7 @@
                         intent: this.intent,
                         transcript: this.chatMessages,
                     });
+                    if (videoUpload) payload.video_upload = videoUpload;
 
                     const response = await this.postJson(this.endpoint, payload);
 
@@ -242,12 +430,16 @@
             // A 419 means Laravel rejected the CSRF token before anything ran, so one retry with a fresh token is safe.
             // Never retried after a 401 or a redirect to login: the session is gone and the user has to sign in.
             async postJson(url, payload) {
+                return this.post(url, JSON.stringify(payload), { 'Content-Type': 'application/json' });
+            },
+
+            async post(url, body, headers) {
                 const send = (token) => fetch(url, {
                     method: 'POST',
                     redirect: 'manual',
                     credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
-                    body: JSON.stringify(payload),
+                    headers: { ...headers, 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
+                    body,
                 });
 
                 const response = await send(this.csrfToken());
@@ -324,6 +516,7 @@
                     timestamp: new Date().toISOString(),
                 };
             },
-        });
+        };
+        };
     </script>
 @endonce

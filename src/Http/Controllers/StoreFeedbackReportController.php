@@ -7,9 +7,11 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Uteq\FeedbackHub\Jobs\ProcessFeedbackReportJob;
 use Uteq\FeedbackHub\Models\FeedbackReport;
 use Uteq\FeedbackHub\Support\FeedbackPayloadSanitizer;
+use Uteq\FeedbackHub\Support\VideoUploads;
 
 class StoreFeedbackReportController extends Controller
 {
@@ -20,6 +22,7 @@ class StoreFeedbackReportController extends Controller
         $validated = $request->validate($this->validationRules());
 
         $user = $request->user();
+        $video = $this->storeVideo($request, $validated['video_upload'] ?? null);
         $screenshot = $this->storeScreenshot($validated['screenshot'] ?? null);
 
         $report = ($this->reportModel())::query()->create(array_merge([
@@ -46,6 +49,10 @@ class StoreFeedbackReportController extends Controller
             'screenshot_path' => $screenshot['path'] ?? null,
             'screenshot_mime' => $screenshot['mime'] ?? null,
             'screenshot_size' => $screenshot['size'] ?? null,
+            'video_disk' => $video['disk'] ?? null,
+            'video_path' => $video['path'] ?? null,
+            'video_mime' => $video['mime'] ?? null,
+            'video_size' => $video['size'] ?? null,
             'reporter_type' => $user ? $user->getMorphClass() : null,
             'reporter_id' => $user?->getKey(),
             'reporter_name' => $user?->name,
@@ -72,6 +79,7 @@ class StoreFeedbackReportController extends Controller
             'element_selector' => ['nullable', 'string', 'max:500'],
             'element_rect' => ['nullable', 'array'],
             'screenshot' => ['nullable', 'string'],
+            'video_upload' => ['nullable', 'uuid'],
             'session_data' => ['nullable', 'array'],
             'console_errors' => ['nullable', 'array'],
             'network_requests' => ['nullable', 'array'],
@@ -105,6 +113,27 @@ class StoreFeedbackReportController extends Controller
     protected function additionalAttributes(array $validated, FeedbackPayloadSanitizer $sanitizer): array
     {
         return [];
+    }
+
+    /**
+     * @return array{disk: string, path: string, mime: string, size: int}|null
+     */
+    private function storeVideo(Request $request, ?string $upload): ?array
+    {
+        if ($upload === null || ! (bool) config('feedback-hub.video.enabled', true)) {
+            return null;
+        }
+
+        $user = $request->user();
+        $video = $user ? app(VideoUploads::class)->finish($user, $upload) : null;
+
+        if ($video === null) {
+            throw ValidationException::withMessages([
+                'video_upload' => 'De video is niet goed aangekomen. Haal hem weg of neem hem opnieuw op.',
+            ]);
+        }
+
+        return $video;
     }
 
     /**

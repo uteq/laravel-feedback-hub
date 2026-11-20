@@ -14,7 +14,7 @@
         .row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 8px 0; border-bottom: 1px solid #f0f1f3; font-size: 14px; }
         .row:last-child { border-bottom: 0; }
         pre { overflow: auto; background: #111827; color: #e5e7eb; padding: 14px; border-radius: 8px; font-size: 12px; }
-        img { display: block; max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; }
+        img, video { display: block; max-width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; }
         @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
     </style>
 </head>
@@ -53,6 +53,11 @@
             @endif
 
             @includeWhen(config('feedback-hub.view_slots.admin_detail'), config('feedback-hub.view_slots.admin_detail'), ['report' => $report])
+
+            @if($report->video_path)
+                <h2>Video</h2>
+                <video src="{{ route('feedback-hub.video', $report) }}" controls preload="metadata" style="width: 100%; background: #111827;"></video>
+            @endif
 
             @if($report->screenshot_path)
                 <h2>Screenshot</h2>

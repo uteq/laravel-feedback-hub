@@ -107,13 +107,38 @@ FEEDBACK_HUB_OS_INBOX_KEY=
 After Telegram, the package posts a version 1 multipart payload with the report summary,
 intent, page URL and selector, reporter details, browser information, the last 30 console
 errors and network requests, GitHub/Linear links, UUID, reference and creation time.
-It attaches the screenshot when available. The transcript and form state are never sent.
+It attaches the screenshot when available and adds `video_url` when there is a screen recording. The transcript and form state are never sent.
 The receiver deduplicates reports on `uuid`, including job retries.
 
 A URL without a key logs a warning and skips delivery. HTTP 4xx responses log a warning
 without failing the report; HTTP 5xx responses and connection errors use the job's retries.
 The health command checks configuration only for this destination; use test delivery to
 exercise the endpoint.
+
+## Screen recording
+
+The widget shows a "Neem je scherm op" button when the browser can record (`getDisplayMedia` and
+`MediaRecorder`). The modal hides while recording; a small bar shows the time and a Stop button.
+Recording stops on Stop, when the browser stops sharing, or after the maximum length. The person
+can watch the recording and remove it before sending. The microphone is optional: without permission
+the recording has no sound.
+
+The recording travels in raw chunks (`POST feedback-hub/video/chunks?offset=…`, default 512 KB), so
+nginx's default 1 MB body limit and PHP's `upload_max_filesize` never apply. Chunks are staged per user in
+`storage/app/feedback-hub/video-uploads`; the report moves the finished file to the storage disk after a
+MIME check (WebM, MP4 or QuickTime). The admin detail plays it from `feedback-hub/{report}/video`
+(Range requests supported). GitHub and Linear issues get a link, Telegram mentions it, and the OS inbox
+payload gets `video_url` only when there is a recording. The file itself is never sent to a third party.
+
+```dotenv
+FEEDBACK_HUB_VIDEO_ENABLED=true
+FEEDBACK_HUB_VIDEO_PATH=feedback-hub/videos
+FEEDBACK_HUB_VIDEO_MAX_SECONDS=120
+FEEDBACK_HUB_VIDEO_MAX_KILOBYTES=30720
+FEEDBACK_HUB_VIDEO_CHUNK_KILOBYTES=512
+```
+
+Run `php artisan migrate` after updating: version 0.6 adds the `video_*` columns.
 
 ## Privacy
 

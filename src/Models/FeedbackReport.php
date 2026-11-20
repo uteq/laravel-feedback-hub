@@ -23,6 +23,7 @@ class FeedbackReport extends Model
             'intent' => 'array',
             'transcript' => 'array',
             'github_issue_number' => 'integer',
+            'video_size' => 'integer',
             'github_synced_at' => 'datetime',
             'linear_synced_at' => 'datetime',
             'telegram_sent_at' => 'datetime',
@@ -47,6 +48,11 @@ class FeedbackReport extends Model
     public function adminUrl(): string
     {
         return route('feedback-hub.show', $this);
+    }
+
+    public function videoUrl(): ?string
+    {
+        return $this->video_path ? route('feedback-hub.video', $this) : null;
     }
 
     public function getRouteKeyName(): string

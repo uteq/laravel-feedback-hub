@@ -60,6 +60,11 @@ class IssueBodyBuilder
             $lines[] = '';
         }
 
+        if ($videoUrl = $report->videoUrl()) {
+            $lines[] = "**Video:** {$videoUrl}";
+            $lines[] = '';
+        }
+
         $this->appendJsonDetails($lines, 'Session data', $report->session_data);
         $this->appendJsonDetails($lines, 'Console errors', $report->console_errors);
         $this->appendJsonDetails($lines, 'Network requests', $report->network_requests);
@@ -85,6 +90,10 @@ class IssueBodyBuilder
 
         if ($goal = $report->intent['goal'] ?? null) {
             $lines[] = 'Doel: '.$this->html($this->summary($this->redact(is_string($goal) || is_int($goal) || is_float($goal) ? (string) $goal : ''), 220));
+        }
+
+        if ($report->video_path) {
+            $lines[] = 'Met schermopname';
         }
 
         $this->appendTelegramContext($lines, $report);

@@ -26,6 +26,18 @@ return [
 
     'queue' => env('FEEDBACK_HUB_QUEUE', 'default'),
 
+    // Screen recording in the widget. The browser sends it in small chunks, so the default
+    // nginx (1 MB) and PHP (2 MB) upload limits never get in the way. Chunks wait in
+    // storage/app/feedback-hub/video-uploads until the report is sent; leftovers older than
+    // a day are removed on the next upload of that user.
+    'video' => [
+        'enabled' => env('FEEDBACK_HUB_VIDEO_ENABLED', true),
+        'path' => env('FEEDBACK_HUB_VIDEO_PATH', 'feedback-hub/videos'),
+        'max_seconds' => (int) env('FEEDBACK_HUB_VIDEO_MAX_SECONDS', 120),
+        'max_kilobytes' => (int) env('FEEDBACK_HUB_VIDEO_MAX_KILOBYTES', 30720),
+        'chunk_kilobytes' => (int) env('FEEDBACK_HUB_VIDEO_CHUNK_KILOBYTES', 512),
+    ],
+
     'github' => [
         'enabled' => env('FEEDBACK_HUB_GITHUB_ENABLED', true),
         'token' => env('FEEDBACK_HUB_GITHUB_TOKEN', env('GITHUB_API_TOKEN', env('GITHUB_TOKEN', env('GH_TOKEN')))),
