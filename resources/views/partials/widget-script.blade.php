@@ -34,6 +34,31 @@
             followUpUrl: config.followUpUrl || null,
             followUpWaitMs: Math.max(1, Number(config.followUpWaitMs) || 3000),
             contextLabel: config.contextLabel || '',
+            myFeedbackUrl: config.myFeedbackUrl || null,
+            myFeedbackBadge: Number(config.myFeedbackBadge) || 0,
+            pageContext: null,
+            closedWhileSubmitting: false,
+            sentVideo: false,
+            init() {
+                this.onNavigate = () => {
+                    const node = document.querySelector('script[data-feedback-hub-props]');
+                    try { if (node) this.updateProps(JSON.parse(node.textContent)); } catch (_) {}
+                };
+                this.onUpdate = event => this.updateProps(event.detail || {});
+                document.addEventListener('livewire:navigated', this.onNavigate);
+                window.addEventListener('feedback-hub:update', this.onUpdate);
+            },
+            destroy() {
+                document.removeEventListener('livewire:navigated', this.onNavigate);
+                window.removeEventListener('feedback-hub:update', this.onUpdate);
+                this.stopActivity?.();
+                media.shotObserver?.disconnect();
+            },
+            updateProps(props) {
+                if (Object.hasOwn(props, 'contextLabel')) this.contextLabel = String(props.contextLabel || '');
+                if (Object.hasOwn(props, 'myFeedbackBadge')) this.myFeedbackBadge = Math.max(0, Number(props.myFeedbackBadge) || 0);
+                if (Object.hasOwn(props, 'myFeedbackUrl')) this.myFeedbackUrl = props.myFeedbackUrl || null;
+            },
             sentReport: null,
             followUpState: null,
             followUpSummary: null,
@@ -76,7 +101,12 @@
             videoUrl: null,
 
             openModal() {
+                if (this.followUpUrl && !this.pageContext && !this.sentReport) this.capturePageContext();
+                this.showChoice = false;
                 this.showModal = true;
+                if (this.followUpUrl && !this.sentReport) {
+                    requestAnimationFrame(() => document.getElementById('feedback-hub-description')?.focus({ preventScroll: true }));
+                }
             },
 
             closeModal() {
@@ -99,34 +129,52 @@
 
             // With video available the person first picks a screenshot or a video; otherwise straight to the screenshot.
             start() {
-                if (this.followUpUrl && !this.sentReport && (this.description || this.videoUrl || this.screenshot)) {
-                    this.openModal();
+                if (this.submitting) { this.openModal(); return; }
+                if (this.followUpUrl && !this.sentReport && this.hasDraft()) {
+                    this.showChoice = true;
                     return;
                 }
                 this.reset();
 
-                if (this.canRecordVideo() || config.myFeedbackUrl) {
+                if (this.canRecordVideo() || this.myFeedbackUrl) {
                     this.showChoice = true;
                     return;
                 }
-
                 this.startScreenshot();
             },
-
+            hasDraft() {
+                return Boolean(this.description || this.videoUrl || this.screenshot);
+            },
+            resumeDraft() { this.openModal(); },
             startScreenshot() {
+                if (this.followUpUrl && this.hasDraft()) this.reset();
+                this.repoint();
+            },
+            repoint() {
                 this.showChoice = false;
-
+                this.closeModal();
+                this.screenshot = null;
+                this.elementSelector = null;
+                this.elementRect = null;
+                this.pageContext = null;
                 if (window.FeedbackHubInspector) {
                     window.FeedbackHubInspector.activate();
                     return;
                 }
-
                 this.openModal();
+            },
+            removeScreenshot() {
+                this.screenshot = null;
+                this.elementRect = null;
             },
 
             close() {
                 if (!this.showModal) return;
                 this.closeModal();
+                if (this.followUpUrl && this.submitting && !this.sentReport) {
+                    this.closedWhileSubmitting = true;
+                    return;
+                }
                 if (this.followUpUrl && !this.sentReport) return;
                 if (this.sentReport && this.followUpState !== 'done') {
                     this.notify('Verstuurd. Terug te vinden bij Mijn feedback.', '', 'success');
@@ -136,7 +184,7 @@
 
             discardDraft() {
                 const draft = {};
-                ['description', 'screenshot', 'elementSelector', 'elementRect', 'sessionData', 'consoleErrors', 'networkRequests', 'formState', 'activity', 'recordingSeconds'].forEach(key => draft[key] = this[key]);
+                ['description', 'screenshot', 'elementSelector', 'elementRect', 'sessionData', 'consoleErrors', 'networkRequests', 'formState', 'activity', 'recordingSeconds', 'pageContext'].forEach(key => draft[key] = this[key]);
                 draft.video = media.video;
                 this.closeModal();
                 this.reset();
@@ -157,14 +205,43 @@
                 media.draft = null;
                 this.openModal();
             },
-            contextText() {
-                if (this.contextLabel) return this.contextLabel;
-                let label = '';
+            selectedLabel() {
                 try {
                     const el = this.elementSelector && document.querySelector(this.elementSelector);
-                    label = el?.getAttribute('aria-label') || el?.labels?.[0]?.textContent || el?.innerText || '';
-                } catch (_) {}
-                return [this.redactText(label).slice(0, 60), document.title].filter(Boolean).join(' · ');
+                    return this.redactText(el?.getAttribute('aria-label') || el?.labels?.[0]?.textContent || el?.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+                } catch (_) { return ''; }
+            },
+            capturePageContext() {
+                const elementLabel = this.selectedLabel();
+                this.pageContext = {
+                    url: this.currentUrl(), title: document.title,
+                    label: [this.contextLabel || document.title, elementLabel].filter(Boolean).join(' · '),
+                    viewport: { width: window.innerWidth, height: window.innerHeight },
+                };
+            },
+            contextText() {
+                return this.pageContext?.label || [this.contextLabel || document.title, this.selectedLabel()].filter(Boolean).join(' · ');
+            },
+            shotRevision: 0,
+            observeShot(image) {
+                media.shotObserver?.disconnect();
+                media.shotObserver = new ResizeObserver(() => this.shotRevision++);
+                media.shotObserver.observe(image);
+            },
+            screenshotOutline(image) {
+                this.shotRevision;
+                if (!this.elementRect) return {};
+                const view = this.pageContext?.viewport || this.sessionData?.viewport || { width: innerWidth, height: innerHeight };
+                if (!image) return {};
+                const scale = Math.min(image.clientWidth / view.width, image.clientHeight / view.height);
+                const x = (image.clientWidth - view.width * scale) / 2;
+                const y = (image.clientHeight - view.height * scale) / 2;
+                return {
+                    left: (x + this.elementRect.x * scale) + 'px',
+                    top: (y + this.elementRect.y * scale) + 'px',
+                    width: (this.elementRect.width * scale) + 'px',
+                    height: (this.elementRect.height * scale) + 'px',
+                };
             },
 
             handleCapture(detail) {
@@ -175,6 +252,10 @@
                 this.consoleErrors = detail.consoleErrors || [];
                 this.networkRequests = detail.networkRequests || [];
                 this.formState = detail.formState || null;
+                if (this.followUpUrl) {
+                    this.capturePageContext();
+                    this.sessionData = { ...(this.sessionData || this.collectSessionData()), title: this.pageContext.title };
+                }
                 this.openModal();
             },
 
@@ -206,6 +287,8 @@
             recordingUnavailableMessage: 'Opnemen is niet gelukt. Je kunt je feedback ook zonder video sturen.',
 
             startVideo() {
+                if (this.followUpUrl && this.hasDraft()) this.reset();
+                this.pageContext = null;
                 this.showChoice = false;
                 this.startRecording();
             },
@@ -214,6 +297,14 @@
                 if (this.recording || !this.canRecordVideo()) return;
 
                 this.error = '';
+                if (this.followUpUrl) {
+                    this.pageContext = null;
+                    this.sessionData = null;
+                    this.screenshot = null;
+                    this.elementSelector = null;
+                    this.elementRect = null;
+                    this.formState = null;
+                }
                 this.removeVideo();
                 this.closeModal();
 
@@ -289,18 +380,17 @@
                 this.activity = [];
                 media.startedAt = performance.now();
                 let lastUrl = location.href;
+                let active = true;
                 const append = (type, el) => {
                     if (this.activity.length >= 500) return;
-                    const control = el?.closest('button,a,input,select,textarea,[role="button"],[contenteditable]') || el;
-                    // Never read a field's value or editable content, including input[type=button].
-                    const label = control?.getAttribute('aria-label')
-                        || control?.labels?.[0]?.textContent
-                        || (control?.matches('input,textarea,select,[contenteditable]') ? '' : control?.innerText) || '';
+                    if (!active) return;
+                    const control = el?.closest('button,a,label,[role="button"],summary,option');
+                    const label = control?.textContent || '';
                     this.activity.push({
                         t: Math.round((performance.now() - media.startedAt) / 100) / 10,
                         type,
-                        label: this.redactText(label).replace(/\s+/g, ' ').trim().slice(0, 60),
-                        selector: (control ? window.FeedbackHubInspector?.getSelector(control) || '' : '').slice(0, 200),
+                        label: this.redactText(label).trim().replace(/\s+/g, ' ').slice(0, 60),
+                        selector: (el ? window.FeedbackHubInspector?.getSelector(control || el) || '' : '').slice(0, 200),
                         path: this.redactText(location.pathname).slice(0, 500),
                     });
                 };
@@ -324,6 +414,7 @@
                 document.addEventListener('livewire:navigated', navigate);
                 window.addEventListener('popstate', navigate);
                 this.stopActivity = () => {
+                    active = false;
                     document.removeEventListener('click', click, true);
                     document.removeEventListener('livewire:navigated', navigate);
                     window.removeEventListener('popstate', navigate);
@@ -372,6 +463,7 @@
             // The page where the recording ends; the screenshot route gets this from the inspector's capture.
             collectPageContext() {
                 const inspector = window.FeedbackHubInspector;
+                if (this.followUpUrl) this.capturePageContext();
                 if (this.sessionData || !inspector) return;
 
                 this.sessionData = inspector.collectContext?.() || null;
@@ -525,6 +617,9 @@
                 this.showChoice = false;
                 this.undoDraft = null;
                 media.draft = null;
+                this.pageContext = null;
+                this.closedWhileSubmitting = false;
+                this.sentVideo = false;
                 this.sentReport = null;
                 this.followUpState = null;
                 this.followUpSummary = null;
@@ -622,13 +717,14 @@
             async submit() {
                 if (this.followUpUrl) {
                     if (!this.description.trim() && !media.video) return;
-                    this.title = this.description.trim().slice(0, 80) || 'Video-feedback';
+                    this.title = this.description.trim().replace(/\s+/g, ' ').slice(0, 80) || 'Video-feedback';
                     this.type = 'bug';
                 }
                 if (!this.title || this.submitting || this.sentReport) return;
 
                 this.error = '';
                 this.submitting = true;
+                this.closedWhileSubmitting = false;
 
                 try {
                     const videoUpload = media.video ? await this.uploadVideo() : null;
@@ -636,7 +732,7 @@
                         type: this.type,
                         title: this.title,
                         description: this.description,
-                        url: this.currentUrl(),
+                        url: this.pageContext?.url || this.currentUrl(),
                         element_selector: this.elementSelector,
                         element_rect: this.elementRect,
                         screenshot: this.screenshot,
@@ -664,7 +760,11 @@
                     }
 
                     if (this.followUpUrl) {
+                        this.sentVideo = Boolean(videoUpload);
                         this.sentReport = data.id;
+                        if (this.closedWhileSubmitting && !this.showModal) {
+                            this.notify('Verstuurd. Terug te vinden bij Mijn feedback.', '', 'success');
+                        }
                         this.followUpState = 'waiting';
                         this.loadFollowUp(data.id);
                         return;
@@ -749,6 +849,8 @@
             },
 
             async post(url, body, headers) {
+                // Never attach a session CSRF secret to an external endpoint.
+                if (new URL(url, location.href).origin !== location.origin) throw new Error('Feedback-adres moet op dezelfde website staan.');
                 const send = (token) => fetch(url, {
                     method: 'POST',
                     redirect: 'manual',
@@ -823,7 +925,8 @@
 
             collectSessionData() {
                 return {
-                    url: this.currentUrl(),
+                    url: this.pageContext?.url || this.currentUrl(),
+                    ...(this.pageContext ? { title: this.pageContext.title } : {}),
                     userAgent: navigator.userAgent,
                     viewport: { width: window.innerWidth, height: window.innerHeight },
                     screen: { width: window.screen.width, height: window.screen.height },

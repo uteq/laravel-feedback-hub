@@ -323,3 +323,25 @@ Clicks inside the widget and recording controls are ignored. The server validate
 limits, removes query/hash from paths and sanitizes strings. Unknown activity keys
 are rejected. Activity is stored separately from `session_data` and shown on the
 admin detail page; it is never added to the GitHub issue body.
+
+The follow-up URL **must be same-origin** (same scheme, host and port as the
+current page). The widget rejects external POST endpoints before fetching;
+CSRF headers and retries are only used on the current origin. This does not
+change the follow-up JSON contract.
+
+The component emits page-local JSON outside its persisted wrapper, so
+`contextLabel`, `myFeedbackBadge` and `myFeedbackUrl` refresh on
+`livewire:navigated`. Hosts may update any subset without navigating:
+
+```js
+window.dispatchEvent(new CustomEvent('feedback-hub:update', {
+    detail: { contextLabel: 'Delivery planning', myFeedbackBadge: 3, myFeedbackUrl: '/my-feedback' }
+}));
+```
+
+A retained draft is offered as “Verder met je tekst” in the choice menu, alongside
+new screenshot/video and My feedback. Its original URL, page title, context label,
+element label and viewport stay with it across navigation; updates apply to new
+feedback. Choosing a new screenshot or recording starts a new draft. Closing
+during submission/upload does not cancel delivery: success is announced by toast
+and follow-up runs without reopening the window.

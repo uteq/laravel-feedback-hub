@@ -9,15 +9,23 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('feedback_hub_reports', function (Blueprint $table): void {
-            $table->json('activity')->nullable();
-            $table->decimal('recording_seconds', 8, 1)->nullable();
+            if (! Schema::hasColumn('feedback_hub_reports', 'activity')) {
+                $table->json('activity')->nullable();
+            }
+            if (! Schema::hasColumn('feedback_hub_reports', 'recording_seconds')) {
+                $table->decimal('recording_seconds', 8, 1)->nullable();
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('feedback_hub_reports', function (Blueprint $table): void {
-            $table->dropColumn(['activity', 'recording_seconds']);
+            foreach (['activity', 'recording_seconds'] as $column) {
+                if (Schema::hasColumn('feedback_hub_reports', $column)) {
+                    $table->dropColumn($column);
+                }
+            }
         });
     }
 };

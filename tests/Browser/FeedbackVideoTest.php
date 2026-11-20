@@ -348,3 +348,53 @@ it('can submit video only through the opt-in follow-up window with activity', fu
         ->and($report->description)->toBeNull()
         ->and(collect($report->activity)->pluck('type')->all())->toContain('click', 'navigate');
 });
+
+it('logs only interactive text and deactivates history wrappers retained by another script', function (): void {
+    $page = videoFeedbackPage();
+    $page->script(<<<'JS'
+        window.FeedbackHubInspector = {getSelector: el => '#' + el.id, redactText: value => value};
+        document.body.insertAdjacentHTML('afterbegin', '<div id="noninteractive">Private customer text</div><button id="interactive"><span>  Planning   opslaan </span></button>');
+    JS);
+    startVideo($page)->click('#noninteractive')->click('#interactive span');
+    $page->script(<<<'JS'
+        const previous = history.pushState;
+        history.pushState = function (...args) { return previous.apply(this, args); };
+        history.pushState({}, '', '/_fhv/during');
+    JS);
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')->assertVisible('.fh-video')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity.find(e=>e.selector==='#noninteractive').label", '')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity.find(e=>e.selector==='#interactive').label", 'Planning opslaan');
+    $page->script("window.countBefore = document.querySelector('.fh-widget')._x_dataStack[0].activity.length; history.pushState({}, '', '/_fhv/after'); history.replaceState({}, '', '/_fhv/after-replace')");
+    $page->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].activity.length === window.countBefore", true);
+});
+
+it('announces a sent report after closing during the chunk upload and follows up silently', function (): void {
+    $page = videoFeedbackPage('follow');
+    $page->script(<<<'JS'
+        window.toasts=[]; window.followRequests=[];
+        window.addEventListener('feedback-hub:toast', e=>window.toasts.push(e.detail.heading));
+        const previous = window.fetch;
+        let delayed=false;
+        window.fetch = (url, options) => {
+            if (String(url).endsWith('/_video-follow-up')) {
+                window.followRequests.push(JSON.parse(options.body));
+                return Promise.resolve(new Response(JSON.stringify({summary:null, questions:[],edit_url:null}), {headers:{'Content-Type':'application/json'}}));
+            }
+            if (!delayed && String(url).includes('/video/chunks')) {
+                delayed=true;
+                return previous(url,options).then(response=>new Promise(resolve=>window.finishChunk=()=>resolve(response)));
+            }
+            return previous(url,options);
+        };
+    JS);
+    startVideo($page);
+    $page->script('new Promise(resolve=>setTimeout(resolve, 600))');
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')->assertVisible('.fh-video')
+        ->click('button:has-text("Versturen")')->assertScript('typeof window.finishChunk', 'function')
+        ->click('button[aria-label="Sluiten"]')->assertNotPresent('.fh-modal:visible');
+    $page->script('window.finishChunk()');
+    $page->assertScript('window.followRequests.length', 1)
+        ->assertScript("window.toasts.includes('Verstuurd. Terug te vinden bij Mijn feedback.')", true)
+        ->assertNotPresent('.fh-modal:visible');
+    $page->assertScript('window.followRequests[0]', ['report' => FeedbackReport::query()->sole()->uuid]);
+});

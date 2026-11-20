@@ -68,7 +68,7 @@
                 <h2>Gezegd en geklikt</h2>
                 <ol>
                     @foreach($report->activity as $entry)
-                        <li>{{ $entry['t'] }}s · {{ $entry['type'] === 'navigate' ? 'Pagina' : 'Klik' }} · {{ $entry['label'] }} · {{ $entry['path'] }} <code>{{ $entry['selector'] }}</code></li>
+                        <li>{{ ($entry['t'] ?? '') }}s · {{ ($entry['type'] ?? '') === 'navigate' ? 'Pagina' : 'Klik' }} · {{ ($entry['label'] ?? '') }} · {{ ($entry['path'] ?? '') }} <code>{{ ($entry['selector'] ?? '') }}</code></li>
                     @endforeach
                 </ol>
             @endif
