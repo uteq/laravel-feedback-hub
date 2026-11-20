@@ -45,6 +45,12 @@ final class OsInboxFeedbackClient
             'created_at' => $report->created_at->toIso8601String(),
         ];
 
+        // The recording stays in the app (it can be large); the receiver gets a link that needs admin access.
+        // Only present when there is a recording, so reports without one keep the exact version 1 payload.
+        if ($videoUrl = $report->videoUrl()) {
+            $payload['video_url'] = $videoUrl;
+        }
+
         $request = Http::withToken((string) config('feedback-hub.os_inbox.key'))
             ->acceptJson()
             ->connectTimeout(5)

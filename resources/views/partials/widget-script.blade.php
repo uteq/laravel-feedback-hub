@@ -13,14 +13,21 @@
             }));
         });
 
-    config: { endpoint, chatEndpoint, csrfEndpoint, chatEnabled }.
+    config: { endpoint, chatEndpoint, csrfEndpoint, chatEnabled, video: { enabled, chunkEndpoint, chunkBytes, maxSeconds } }.
+    The screen recording (startRecording/stopRecording) hides the modal while it records and opens it again
+    afterwards; a recording travels in chunks to video.chunkEndpoint before the report is sent.
     The defaults below toggle a `showModal` boolean and toast through window.Flux.toast,
     falling back to a cancelable `feedback-hub:toast` window event, followed by
     `mortel-toast` unless the host calls preventDefault().
 --}}
 @once
     <script>
-        window.FeedbackHubWidget = (config) => ({
+        window.FeedbackHubWidget = (config) => {
+        // Native media objects stay outside Alpine's reactive proxy: a proxied MediaRecorder or Blob breaks.
+        const media = { recorder: null, streams: [], chunks: [], timer: null, video: null, discard: false, leaveGuard: null, crop: null };
+        const video = config.video || {};
+
+        return {
             endpoint: config.endpoint,
             chatEndpoint: config.chatEndpoint,
             csrfEndpoint: config.csrfEndpoint,
@@ -43,6 +50,15 @@
             consoleErrors: [],
             networkRequests: [],
             formState: null,
+            videoEnabled: Boolean(video.enabled),
+            videoChunkEndpoint: video.chunkEndpoint,
+            videoChunkBytes: Number(video.chunkBytes) || 512 * 1024,
+            videoMaxSeconds: Number(video.maxSeconds) || 120,
+            showChoice: false,
+            recording: false,
+            recordingSeconds: 0,
+            uploadProgress: null,
+            videoUrl: null,
 
             openModal() {
                 this.showModal = true;
@@ -66,8 +82,20 @@
                 }
             },
 
+            // With video available the person first picks a screenshot or a video; otherwise straight to the screenshot.
             start() {
                 this.reset();
+
+                if (this.canRecordVideo()) {
+                    this.showChoice = true;
+                    return;
+                }
+
+                this.startScreenshot();
+            },
+
+            startScreenshot() {
+                this.showChoice = false;
 
                 if (window.FeedbackHubInspector) {
                     window.FeedbackHubInspector.activate();
@@ -99,7 +127,294 @@
                 }
             },
 
+            canRecordVideo() {
+                return this.videoEnabled
+                    && Boolean(this.videoChunkEndpoint)
+                    && typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+                    && typeof window.MediaRecorder === 'function';
+            },
+
+            videoLimitLabel() {
+                const seconds = this.videoMaxSeconds;
+
+                return seconds % 60 === 0 && seconds >= 120 ? `${seconds / 60} minuten` : `${seconds} seconden`;
+            },
+
+            recordingClock() {
+                const seconds = this.recordingSeconds;
+
+                return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+            },
+
+            recordingUnavailableMessage: 'Opnemen is niet gelukt. Je kunt je feedback ook zonder video sturen.',
+
+            startVideo() {
+                this.showChoice = false;
+                this.startRecording();
+            },
+
+            async startRecording() {
+                if (this.recording || !this.canRecordVideo()) return;
+
+                this.error = '';
+                this.removeVideo();
+                this.closeModal();
+
+                let display;
+                try {
+                    // Ask for this tab (Chrome and Edge show "Share this tab?"), never the whole screen where the browser lets us.
+                    display = await navigator.mediaDevices.getDisplayMedia({
+                        video: { displaySurface: 'browser', frameRate: 15 },
+                        audio: false,
+                        preferCurrentTab: true,
+                        selfBrowserSurface: 'include',
+                        surfaceSwitching: 'exclude',
+                        monitorTypeSurfaces: 'exclude',
+                    });
+                } catch (error) {
+                    this.error = this.recordingUnavailableMessage;
+                    this.openModal();
+                    return;
+                }
+
+                // The voice is optional: without a microphone (or permission) the recording simply has no sound.
+                let microphone = null;
+                try {
+                    microphone = await navigator.mediaDevices.getUserMedia?.({ audio: true }) || null;
+                } catch (error) {
+                    microphone = null;
+                }
+
+                media.streams = [display, microphone].filter(Boolean);
+                media.crop = await this.cropToPage(display);
+                const audio = microphone ? microphone.getAudioTracks() : [];
+                const stream = new MediaStream([...(media.crop ? [media.crop.track] : display.getVideoTracks()), ...audio]);
+                const types = audio.length
+                    ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+                    : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+                const mimeType = types.find((type) => MediaRecorder.isTypeSupported(type));
+
+                let recorder;
+                try {
+                    recorder = new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: 800000, audioBitsPerSecond: 64000 });
+                } catch (error) {
+                    this.stopStreams();
+                    this.error = this.recordingUnavailableMessage;
+                    this.openModal();
+                    return;
+                }
+
+                media.recorder = recorder;
+                media.chunks = [];
+                media.discard = false;
+                recorder.ondataavailable = (event) => { if (event.data?.size) media.chunks.push(event.data); };
+                recorder.onstop = () => this.finishRecording(recorder.mimeType || mimeType || 'video/webm');
+
+                // "Stop sharing" in the browser bar ends the video track; treat it as pressing Stop.
+                display.getVideoTracks().forEach((track) => track.addEventListener('ended', () => this.stopRecording(), { once: true }));
+
+                // The widget survives wire:navigate (x-persist); a real page load would end the recording, so warn first.
+                media.leaveGuard = (event) => { event.preventDefault(); event.returnValue = ''; };
+                window.addEventListener('beforeunload', media.leaveGuard);
+
+                this.recordingSeconds = 0;
+                this.recording = true;
+                recorder.start(1000);
+                media.timer = setInterval(() => {
+                    this.recordingSeconds++;
+                    if (this.recordingSeconds >= this.videoMaxSeconds) this.stopRecording();
+                }, 1000);
+            },
+
+            stopRecording() {
+                if (media.recorder && media.recorder.state !== 'inactive') {
+                    media.recorder.stop();
+                }
+            },
+
+            finishRecording(type) {
+                clearInterval(media.timer);
+                media.timer = null;
+                if (media.leaveGuard) window.removeEventListener('beforeunload', media.leaveGuard);
+                media.leaveGuard = null;
+                media.recorder = null;
+                this.stopStreams();
+                this.recording = false;
+
+                const chunks = media.chunks;
+                media.chunks = [];
+
+                if (media.discard) {
+                    media.discard = false;
+                    return;
+                }
+
+                const blob = new Blob(chunks, { type: String(type).split(';')[0] || 'video/webm' });
+                if (blob.size > 0) {
+                    media.video = blob;
+                    this.videoUrl = URL.createObjectURL(blob);
+                    this.collectPageContext();
+                } else {
+                    this.error = this.recordingUnavailableMessage;
+                }
+
+                this.openModal();
+            },
+
+            // The page where the recording ends; the screenshot route gets this from the inspector's capture.
+            collectPageContext() {
+                const inspector = window.FeedbackHubInspector;
+                if (this.sessionData || !inspector) return;
+
+                this.sessionData = inspector.collectContext?.() || null;
+                this.consoleErrors = window.__feedbackHubConsoleErrors || [];
+                this.networkRequests = window.__feedbackHubNetworkRequests || [];
+                this.formState = inspector.collectFormState?.() || null;
+            },
+
+            // Firefox cannot share a single tab: it records a window or a screen, side panel and tab titles included.
+            // Firefox does say where the page sits on screen (mozInnerScreenX/Y), so the recording is cut to the page.
+            // When the shared surface does not match this window or screen (another window), it stays as it is.
+            async cropToPage(display) {
+                const track = display.getVideoTracks()[0];
+                if (typeof window.mozInnerScreenX !== 'number' || !track || track.getSettings?.().displaySurface === 'browser') return null;
+
+                const source = document.createElement('video');
+                source.muted = true;
+                source.playsInline = true;
+                source.srcObject = display;
+                await source.play().catch(() => {});
+                if (!source.videoWidth) {
+                    await new Promise((resolve) => { source.onloadedmetadata = resolve; setTimeout(resolve, 1500); });
+                }
+
+                const first = this.pageRegion(source.videoWidth, source.videoHeight);
+                if (!first) {
+                    source.srcObject = null;
+                    return null;
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(first.width);
+                canvas.height = Math.round(first.height);
+                const context = canvas.getContext('2d');
+                const draw = () => {
+                    const region = this.pageRegion(source.videoWidth, source.videoHeight) || first;
+                    context.drawImage(source, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height);
+                };
+                draw();
+                const timer = setInterval(draw, 1000 / 15);
+                const stream = canvas.captureStream(15);
+
+                return {
+                    track: stream.getVideoTracks()[0],
+                    stop() {
+                        clearInterval(timer);
+                        stream.getTracks().forEach((cropped) => cropped.stop());
+                        source.srcObject = null;
+                    },
+                };
+            },
+
+            // Where the page sits in a recorded frame of this window, or of the screen it is on; null when neither fits.
+            pageRegion(frameWidth, frameHeight) {
+                if (!frameWidth || !frameHeight) return null;
+
+                const surfaces = [
+                    { width: window.outerWidth, height: window.outerHeight, left: window.screenX, top: window.screenY },
+                    { width: window.screen.width, height: window.screen.height, left: window.screen.left || 0, top: window.screen.top || 0 },
+                ];
+
+                for (const surface of surfaces) {
+                    const scale = frameWidth / surface.width;
+                    if (!scale || Math.abs(surface.height * scale - frameHeight) > Math.max(4, frameHeight * 0.03)) continue;
+
+                    const x = (window.mozInnerScreenX - surface.left) * scale;
+                    const y = (window.mozInnerScreenY - surface.top) * scale;
+                    const width = window.innerWidth * scale;
+                    const height = window.innerHeight * scale;
+                    if (x < 0 || y < 0 || x + width > frameWidth + 2 || y + height > frameHeight + 2) continue;
+
+                    return { x, y, width: Math.min(width, frameWidth - x), height: Math.min(height, frameHeight - y) };
+                }
+
+                return null;
+            },
+
+            stopStreams() {
+                media.crop?.stop();
+                media.crop = null;
+                media.streams.forEach((stream) => stream.getTracks().forEach((track) => track.stop()));
+                media.streams = [];
+            },
+
+            removeVideo() {
+                if (this.videoUrl) URL.revokeObjectURL(this.videoUrl);
+                this.videoUrl = null;
+                media.video = null;
+            },
+
+            // Sends the recording in pieces that stay under the usual upload limits; returns the upload id.
+            async uploadVideo() {
+                const blob = media.video;
+                let upload = null;
+                let offset = 0;
+                let conflicts = 0;
+                let failures = 0;
+                this.uploadProgress = 0;
+
+                while (offset < blob.size) {
+                    const url = new URL(this.videoChunkEndpoint, window.location.href);
+                    if (upload) url.searchParams.set('upload', upload);
+                    url.searchParams.set('offset', String(offset));
+
+                    // A long recording is hundreds of pieces: a network hiccup or a busy server retries the piece, not the video.
+                    let response;
+                    try {
+                        response = await this.post(url.toString(), blob.slice(offset, offset + this.videoChunkBytes), { 'Content-Type': 'application/octet-stream' });
+                    } catch (error) {
+                        response = null;
+                    }
+                    if ((!response || response.status >= 500 || response.status === 429) && failures++ < 5) {
+                        await new Promise((resolve) => setTimeout(resolve, Math.min(8000, 500 * 2 ** failures)));
+                        continue;
+                    }
+                    if (!response) throw new Error('De video kon niet worden verstuurd. Probeer het opnieuw, of verwijder de video.');
+
+                    const data = await response.json().catch(() => ({}));
+
+                    if (this.sessionEnded(response)) throw new Error(this.sessionMessage);
+
+                    // The server tells where the upload stands; continue from there (a retried piece is not added twice).
+                    if (response.status === 409 && Number.isInteger(data.offset) && conflicts++ < 3) {
+                        upload = data.upload || upload;
+                        offset = data.offset;
+                        continue;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(response.status === 413
+                            ? 'De video is te groot. Neem een kortere video op, of verwijder hem.'
+                            : 'De video kon niet worden verstuurd. Probeer het opnieuw, of verwijder de video.');
+                    }
+
+                    upload = data.upload;
+                    offset = data.offset;
+                    failures = 0;
+                    conflicts = 0;
+                    this.uploadProgress = Math.min(100, Math.round((offset / blob.size) * 100));
+                }
+
+                return upload;
+            },
+
             reset() {
+                if (this.recording) {
+                    media.discard = true;
+                    this.stopRecording();
+                }
+                this.removeVideo();
+                this.showChoice = false;
                 this.error = '';
                 this.type = 'bug';
                 this.title = '';
@@ -189,6 +504,7 @@
                 this.submitting = true;
 
                 try {
+                    const videoUpload = media.video ? await this.uploadVideo() : null;
                     const payload = this.redactPayload({
                         type: this.type,
                         title: this.title,
@@ -204,6 +520,7 @@
                         intent: this.intent,
                         transcript: this.chatMessages,
                     });
+                    if (videoUpload) payload.video_upload = videoUpload;
 
                     const response = await this.postJson(this.endpoint, payload);
 
@@ -221,6 +538,7 @@
                     this.error = error.message || 'Probeer het opnieuw';
                     this.notify('Er ging iets mis', this.error, 'danger');
                 } finally {
+                    this.uploadProgress = null;
                     this.submitting = false;
                 }
             },
@@ -242,12 +560,16 @@
             // A 419 means Laravel rejected the CSRF token before anything ran, so one retry with a fresh token is safe.
             // Never retried after a 401 or a redirect to login: the session is gone and the user has to sign in.
             async postJson(url, payload) {
+                return this.post(url, JSON.stringify(payload), { 'Content-Type': 'application/json' });
+            },
+
+            async post(url, body, headers) {
                 const send = (token) => fetch(url, {
                     method: 'POST',
                     redirect: 'manual',
                     credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
-                    body: JSON.stringify(payload),
+                    headers: { ...headers, 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
+                    body,
                 });
 
                 const response = await send(this.csrfToken());
@@ -324,6 +646,7 @@
                     timestamp: new Date().toISOString(),
                 };
             },
-        });
+        };
+        };
     </script>
 @endonce

@@ -107,13 +107,48 @@ FEEDBACK_HUB_OS_INBOX_KEY=
 After Telegram, the package posts a version 1 multipart payload with the report summary,
 intent, page URL and selector, reporter details, browser information, the last 30 console
 errors and network requests, GitHub/Linear links, UUID, reference and creation time.
-It attaches the screenshot when available. The transcript and form state are never sent.
+It attaches the screenshot when available and adds `video_url` when there is a screen recording. The transcript and form state are never sent.
 The receiver deduplicates reports on `uuid`, including job retries.
 
 A URL without a key logs a warning and skips delivery. HTTP 4xx responses log a warning
 without failing the report; HTTP 5xx responses and connection errors use the job's retries.
 The health command checks configuration only for this destination; use test delivery to
 exercise the endpoint.
+
+## Screen recording
+
+When the browser can record (`getDisplayMedia` and `MediaRecorder`), the feedback button first asks
+"Schermafbeelding" (point at an element, as before) or "Video opnemen". A video starts right away and
+asks for this tab only where the browser supports it (`preferCurrentTab`, `displaySurface: 'browser'`,
+`monitorTypeSurfaces: 'exclude'`). A small bar shows the time and a Stop button. The widget is wrapped in
+`x-persist`, so with Livewire `wire:navigate` the recording keeps running across pages; a full page load
+asks for confirmation first. Recording stops on Stop, when the browser stops sharing, or after the maximum
+length. Firefox cannot share a single tab; it shares a window or a screen. There the recording is
+cut to the page (`mozInnerScreenX/Y` against the window or screen geometry), so side panels and tab titles
+stay out; a surface that matches neither stays uncut. The person watches the recording, can record again
+or delete it, and sends it. The microphone is
+optional: without permission the recording has no sound.
+
+A long recording (say 30 minutes, set `FEEDBACK_HUB_VIDEO_MAX_SECONDS=1800` and raise
+`FEEDBACK_HUB_VIDEO_MAX_KILOBYTES` to about 256000) is hundreds of chunks: the widget shows
+"Video versturen 45%" and retries a chunk up to five times on a network error, 429 or 5xx.
+
+The recording travels in raw chunks (`POST feedback-hub/video/chunks?offset=…`, default 512 KB), so
+nginx's default 1 MB body limit and PHP's `upload_max_filesize` never apply. Chunks are staged per user in
+`storage/app/feedback-hub/video-uploads`; the report moves the finished file to the storage disk after a
+MIME check (WebM, MP4 or QuickTime). The admin detail plays it from `feedback-hub/{report}/video`
+(Range requests supported). GitHub and Linear issues get a link, Telegram mentions it, and the OS inbox
+payload gets `video_url` only when there is a recording. The file itself is never sent to a third party.
+
+```dotenv
+FEEDBACK_HUB_VIDEO_ENABLED=true
+FEEDBACK_HUB_VIDEO_PATH=feedback-hub/videos
+FEEDBACK_HUB_VIDEO_MAX_SECONDS=120
+FEEDBACK_HUB_VIDEO_MAX_KILOBYTES=30720
+FEEDBACK_HUB_VIDEO_CHUNK_KILOBYTES=512
+```
+
+Run `php artisan migrate` after updating: version 0.6 adds the `video_*` columns.
 
 ## Privacy
 
