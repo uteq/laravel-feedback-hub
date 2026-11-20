@@ -17,6 +17,20 @@ class FeedbackPayloadSanitizer
         return $this->sanitizeArray($payload);
     }
 
+    /** Activity is deliberately separate from session data and outbound issue context. */
+    public function sanitizeActivity(?array $activity): ?array
+    {
+        if ($activity === null) {
+            return null;
+        }
+
+        return array_map(function (array $entry): array {
+            $entry['path'] = explode('#', explode('?', $entry['path'])[0])[0];
+
+            return $this->sanitize($entry);
+        }, $activity);
+    }
+
     public function redactString(string $value): string
     {
         $value = preg_replace_callback(

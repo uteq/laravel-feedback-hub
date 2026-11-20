@@ -33,6 +33,8 @@ class StoreFeedbackReportController extends Controller
             'page_url' => $sanitizer->redactString($validated['url']),
             'element_selector' => isset($validated['element_selector']) ? $sanitizer->redactString($validated['element_selector']) : null,
             'element_rect' => $sanitizer->sanitize($validated['element_rect'] ?? null),
+            'activity' => $sanitizer->sanitizeActivity($validated['activity'] ?? null),
+            'recording_seconds' => $validated['recording_seconds'] ?? null,
             'session_data' => $sanitizer->sanitize($validated['session_data'] ?? null),
             'console_errors' => $sanitizer->sanitize($validated['console_errors'] ?? null),
             'network_requests' => $sanitizer->sanitize($validated['network_requests'] ?? null),
@@ -80,6 +82,26 @@ class StoreFeedbackReportController extends Controller
             'element_rect' => ['nullable', 'array'],
             'screenshot' => ['nullable', 'string'],
             'video_upload' => ['nullable', 'uuid'],
+            'activity' => ['nullable', 'array', 'max:500', function (string $attribute, mixed $value, \Closure $fail): void {
+                if (! is_array($value)) {
+                    return;
+                }
+
+                foreach (array_values($value) as $index => $entry) {
+                    if (is_array($entry) && ($entry['type'] ?? null) === 'start' && $index !== 0) {
+                        $fail('A recording start must be the first activity entry.');
+
+                        break;
+                    }
+                }
+            }],
+            'activity.*' => ['array:t,type,label,selector,path'],
+            'activity.*.t' => ['required', 'numeric', 'min:0'],
+            'activity.*.type' => ['required', Rule::in(['start', 'click', 'navigate'])],
+            'activity.*.label' => ['present', 'nullable', 'string', 'max:60'],
+            'activity.*.selector' => ['present', 'nullable', 'string', 'max:200'],
+            'activity.*.path' => ['required', 'string', 'max:500'],
+            'recording_seconds' => ['nullable', 'numeric', 'min:0', 'max:999999'],
             'session_data' => ['nullable', 'array'],
             'console_errors' => ['nullable', 'array'],
             'network_requests' => ['nullable', 'array'],

@@ -31,8 +31,48 @@
             endpoint: config.endpoint,
             chatEndpoint: config.chatEndpoint,
             csrfEndpoint: config.csrfEndpoint,
-            chatEnabled: Boolean(config.chatEnabled),
-            mode: config.chatEnabled ? 'chat' : 'form',
+            followUpUrl: config.followUpUrl || null,
+            followUpWaitMs: Math.max(1, Number(config.followUpWaitMs) || 3000),
+            contextLabel: config.contextLabel || '',
+            myFeedbackUrl: config.myFeedbackUrl || null,
+            myFeedbackBadge: Number(config.myFeedbackBadge) || 0,
+            pageContext: null,
+            closedWhileSubmitting: false,
+            sentVideo: false,
+            init() {
+                this.onNavigate = () => {
+                    const node = document.querySelector('script[data-feedback-hub-props]');
+                    try { if (node) this.updateProps(JSON.parse(node.textContent)); } catch (_) {}
+                };
+                this.onUpdate = event => this.updateProps(event.detail || {});
+                document.addEventListener('livewire:navigated', this.onNavigate);
+                window.addEventListener('feedback-hub:update', this.onUpdate);
+            },
+            destroy() {
+                document.removeEventListener('livewire:navigated', this.onNavigate);
+                window.removeEventListener('feedback-hub:update', this.onUpdate);
+                this.stopActivity?.();
+                media.shotObserver?.disconnect();
+            },
+            updateProps(props) {
+                if (Object.hasOwn(props, 'contextLabel')) this.contextLabel = String(props.contextLabel || '');
+                if (Object.hasOwn(props, 'myFeedbackBadge')) this.myFeedbackBadge = Math.max(0, Number(props.myFeedbackBadge) || 0);
+                if (Object.hasOwn(props, 'myFeedbackUrl')) this.myFeedbackUrl = props.myFeedbackUrl || null;
+            },
+            sentReport: null,
+            followUpState: null,
+            followUpSummary: null,
+            followUpQuestions: [],
+            questionIndex: 0,
+            selectedAnswer: null,
+            answering: false,
+            otherAnswer: false,
+            answerText: '',
+            editUrl: null,
+            followUpLate: false,
+            activity: [],
+            chatEnabled: !config.followUpUrl && Boolean(config.chatEnabled),
+            mode: !config.followUpUrl && config.chatEnabled ? 'chat' : 'form',
             chatMessages: [],
             chatInput: '',
             chatBusy: false,
@@ -61,7 +101,12 @@
             videoUrl: null,
 
             openModal() {
+                if (this.followUpUrl && !this.pageContext && !this.sentReport) this.capturePageContext();
+                this.showChoice = false;
                 this.showModal = true;
+                if (this.followUpUrl && !this.sentReport) {
+                    requestAnimationFrame(() => document.getElementById('feedback-hub-description')?.focus({ preventScroll: true }));
+                }
             },
 
             closeModal() {
@@ -84,30 +129,119 @@
 
             // With video available the person first picks a screenshot or a video; otherwise straight to the screenshot.
             start() {
-                this.reset();
-
-                if (this.canRecordVideo()) {
+                if (this.submitting) { this.openModal(); return; }
+                if (this.followUpUrl && !this.sentReport && this.hasDraft()) {
                     this.showChoice = true;
                     return;
                 }
+                this.reset();
 
+                if (this.canRecordVideo() || this.myFeedbackUrl) {
+                    this.showChoice = true;
+                    return;
+                }
                 this.startScreenshot();
             },
-
+            hasDraft() {
+                return Boolean(this.description || this.videoUrl || this.screenshot);
+            },
+            resumeDraft() { this.openModal(); },
             startScreenshot() {
+                if (this.followUpUrl && this.hasDraft()) this.reset();
+                this.repoint();
+            },
+            repoint() {
                 this.showChoice = false;
-
+                this.closeModal();
+                this.screenshot = null;
+                this.elementSelector = null;
+                this.elementRect = null;
+                this.pageContext = null;
                 if (window.FeedbackHubInspector) {
                     window.FeedbackHubInspector.activate();
                     return;
                 }
-
                 this.openModal();
+            },
+            removeScreenshot() {
+                this.screenshot = null;
+                this.elementRect = null;
             },
 
             close() {
+                if (!this.showModal) return;
+                this.closeModal();
+                if (this.followUpUrl && this.submitting && !this.sentReport) {
+                    this.closedWhileSubmitting = true;
+                    return;
+                }
+                if (this.followUpUrl && !this.sentReport) return;
+                if (this.sentReport && this.followUpState !== 'done') {
+                    this.notify('Verstuurd. Terug te vinden bij Mijn feedback.', '', 'success');
+                }
+                this.reset();
+            },
+
+            discardDraft() {
+                const draft = {};
+                ['description', 'screenshot', 'elementSelector', 'elementRect', 'sessionData', 'consoleErrors', 'networkRequests', 'formState', 'activity', 'recordingSeconds', 'pageContext'].forEach(key => draft[key] = this[key]);
+                draft.video = media.video;
                 this.closeModal();
                 this.reset();
+                media.draft = draft;
+                this.undoDraft = true;
+                setTimeout(() => {
+                    if (media.draft === draft) { this.undoDraft = null; media.draft = null; }
+                }, 8000);
+            },
+            undoDraft: null,
+            restoreDraft() {
+                const draft = media.draft;
+                if (!draft) return;
+                const { video: blob, ...fields } = draft;
+                Object.assign(this, fields);
+                if (blob) { media.video = blob; this.videoUrl = URL.createObjectURL(blob); }
+                this.undoDraft = null;
+                media.draft = null;
+                this.openModal();
+            },
+            selectedLabel() {
+                try {
+                    const el = this.elementSelector && document.querySelector(this.elementSelector);
+                    return this.redactText(el?.getAttribute('aria-label') || el?.labels?.[0]?.textContent || el?.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+                } catch (_) { return ''; }
+            },
+            capturePageContext() {
+                const elementLabel = this.selectedLabel();
+                this.pageContext = {
+                    url: this.currentUrl(), title: document.title,
+                    label: [this.contextLabel || document.title, elementLabel].filter(Boolean).join(' · '),
+                    viewport: { width: window.innerWidth, height: window.innerHeight },
+                };
+            },
+            contextText() {
+                return this.pageContext?.label || [this.contextLabel || document.title, this.selectedLabel()].filter(Boolean).join(' · ');
+            },
+            shotRevision: 0,
+            observeShot(image) {
+                media.shotObserver?.disconnect();
+                media.shotObserver = new ResizeObserver(() => this.shotRevision++);
+                media.shotObserver.observe(image);
+            },
+            screenshotOutline(image) {
+                this.shotRevision;
+                if (!this.elementRect) return {};
+                const view = this.pageContext?.viewport || this.sessionData?.viewport || { width: innerWidth, height: innerHeight };
+                if (!image) return {};
+                const scale = Math.min(image.clientWidth / view.width, image.clientHeight / view.height);
+                const x = (image.clientWidth - view.width * scale) / 2;
+                const y = (image.clientHeight - view.height * scale) / 2;
+                return {
+                    left: (x + this.elementRect.x * scale) + 'px',
+                    top: (y + this.elementRect.y * scale) + 'px',
+                    width: (this.elementRect.width * scale) + 'px',
+                    height: (this.elementRect.height * scale) + 'px',
+                };
             },
 
             handleCapture(detail) {
@@ -118,6 +252,10 @@
                 this.consoleErrors = detail.consoleErrors || [];
                 this.networkRequests = detail.networkRequests || [];
                 this.formState = detail.formState || null;
+                if (this.followUpUrl) {
+                    this.capturePageContext();
+                    this.sessionData = { ...(this.sessionData || this.collectSessionData()), title: this.pageContext.title };
+                }
                 this.openModal();
             },
 
@@ -149,6 +287,8 @@
             recordingUnavailableMessage: 'Opnemen is niet gelukt. Je kunt je feedback ook zonder video sturen.',
 
             startVideo() {
+                if (this.followUpUrl && this.hasDraft()) this.reset();
+                this.pageContext = null;
                 this.showChoice = false;
                 this.startRecording();
             },
@@ -157,6 +297,14 @@
                 if (this.recording || !this.canRecordVideo()) return;
 
                 this.error = '';
+                if (this.followUpUrl) {
+                    this.pageContext = null;
+                    this.sessionData = null;
+                    this.screenshot = null;
+                    this.elementSelector = null;
+                    this.elementRect = null;
+                    this.formState = null;
+                }
                 this.removeVideo();
                 this.closeModal();
 
@@ -219,11 +367,65 @@
 
                 this.recordingSeconds = 0;
                 this.recording = true;
+                this.startActivity();
                 recorder.start(1000);
                 media.timer = setInterval(() => {
                     this.recordingSeconds++;
                     if (this.recordingSeconds >= this.videoMaxSeconds) this.stopRecording();
                 }, 1000);
+            },
+
+            startActivity() {
+                this.stopActivity?.();
+                media.startedAt = performance.now();
+                this.activity = [{
+                    t: 0, type: 'start',
+                    label: this.redactText(document.title).slice(0, 60),
+                    selector: '',
+                    path: this.redactText(location.pathname).slice(0, 500),
+                }];
+                let lastUrl = location.href;
+                let active = true;
+                const append = (type, el) => {
+                    if (this.activity.length >= 500) return;
+                    if (!active) return;
+                    const control = el?.closest('button,a,label,[role="button"],summary,option');
+                    const label = control?.textContent || '';
+                    this.activity.push({
+                        t: Math.round((performance.now() - media.startedAt) / 100) / 10,
+                        type,
+                        label: this.redactText(label).trim().replace(/\s+/g, ' ').slice(0, 60),
+                        selector: (el ? window.FeedbackHubInspector?.getSelector(control || el) || '' : '').slice(0, 200),
+                        path: this.redactText(location.pathname).slice(0, 500),
+                    });
+                };
+                const click = event => {
+                    if (!(event.target instanceof Element) || event.target.closest('.fh-widget, [data-feedback-hub-recording]')) return;
+                    append('click', event.target);
+                };
+                const navigate = () => {
+                    if (lastUrl === location.href) return;
+                    lastUrl = location.href;
+                    append('navigate', null);
+                };
+                const originals = {};
+                const wrappers = {};
+                ['pushState', 'replaceState'].forEach(name => {
+                    originals[name] = history[name];
+                    wrappers[name] = function (...args) { const result = originals[name].apply(this, args); navigate(); return result; };
+                    history[name] = wrappers[name];
+                });
+                document.addEventListener('click', click, true);
+                document.addEventListener('livewire:navigated', navigate);
+                window.addEventListener('popstate', navigate);
+                this.stopActivity = () => {
+                    active = false;
+                    document.removeEventListener('click', click, true);
+                    document.removeEventListener('livewire:navigated', navigate);
+                    window.removeEventListener('popstate', navigate);
+                    Object.keys(originals).forEach(name => { if (history[name] === wrappers[name]) history[name] = originals[name]; });
+                    this.stopActivity = null;
+                };
             },
 
             stopRecording() {
@@ -239,6 +441,8 @@
                 media.leaveGuard = null;
                 media.recorder = null;
                 this.stopStreams();
+                this.stopActivity?.();
+                this.recordingSeconds = Math.round((performance.now() - media.startedAt) / 100) / 10;
                 this.recording = false;
 
                 const chunks = media.chunks;
@@ -264,6 +468,7 @@
             // The page where the recording ends; the screenshot route gets this from the inspector's capture.
             collectPageContext() {
                 const inspector = window.FeedbackHubInspector;
+                if (this.followUpUrl) this.capturePageContext();
                 if (this.sessionData || !inspector) return;
 
                 this.sessionData = inspector.collectContext?.() || null;
@@ -415,6 +620,23 @@
                 }
                 this.removeVideo();
                 this.showChoice = false;
+                this.undoDraft = null;
+                media.draft = null;
+                this.pageContext = null;
+                this.closedWhileSubmitting = false;
+                this.sentVideo = false;
+                this.sentReport = null;
+                this.followUpState = null;
+                this.followUpSummary = null;
+                this.followUpQuestions = [];
+                this.questionIndex = 0;
+                this.answering = false;
+                this.otherAnswer = false;
+                this.answerText = '';
+                this.selectedAnswer = null;
+                this.editUrl = null;
+                this.followUpLate = false;
+                this.activity = [];
                 this.error = '';
                 this.type = 'bug';
                 this.title = '';
@@ -498,10 +720,16 @@
             },
 
             async submit() {
-                if (!this.title || this.submitting) return;
+                if (this.followUpUrl) {
+                    if (!this.description.trim() && !media.video) return;
+                    this.title = this.description.trim().replace(/\s+/g, ' ').slice(0, 80) || 'Video-feedback';
+                    this.type = 'bug';
+                }
+                if (!this.title || this.submitting || this.sentReport) return;
 
                 this.error = '';
                 this.submitting = true;
+                this.closedWhileSubmitting = false;
 
                 try {
                     const videoUpload = media.video ? await this.uploadVideo() : null;
@@ -509,7 +737,7 @@
                         type: this.type,
                         title: this.title,
                         description: this.description,
-                        url: this.currentUrl(),
+                        url: this.pageContext?.url || this.currentUrl(),
                         element_selector: this.elementSelector,
                         element_rect: this.elementRect,
                         screenshot: this.screenshot,
@@ -520,7 +748,11 @@
                         intent: this.intent,
                         transcript: this.chatMessages,
                     });
-                    if (videoUpload) payload.video_upload = videoUpload;
+                    if (videoUpload) {
+                        payload.video_upload = videoUpload;
+                        payload.activity = this.activity;
+                        payload.recording_seconds = this.recordingSeconds;
+                    }
 
                     const response = await this.postJson(this.endpoint, payload);
 
@@ -532,6 +764,16 @@
                         throw new Error(data.message || 'Feedback kon niet worden verstuurd');
                     }
 
+                    if (this.followUpUrl) {
+                        this.sentVideo = Boolean(videoUpload);
+                        this.sentReport = data.id;
+                        if (this.closedWhileSubmitting && !this.showModal) {
+                            this.notify('Verstuurd. Terug te vinden bij Mijn feedback.', '', 'success');
+                        }
+                        this.followUpState = 'waiting';
+                        this.loadFollowUp(data.id);
+                        return;
+                    }
                     this.close();
                     this.notify('Feedback verzonden', data.reference ? `Referentie: ${data.reference}` : '', 'success');
                 } catch (error) {
@@ -541,6 +783,57 @@
                     this.uploadProgress = null;
                     this.submitting = false;
                 }
+            },
+
+            async loadFollowUp(report) {
+                let timer;
+                try {
+                    const data = await Promise.race([
+                        this.postJson(this.followUpUrl, { report }).then(async response => {
+                            const data = await response.json();
+                            const later = response.status === 202 || data.later === true;
+                            if (!response.ok && !later) throw new Error('follow-up');
+                            return { ...data, later };
+                        }),
+                        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), this.followUpWaitMs); }),
+                    ]);
+                    if (this.sentReport !== report) return;
+                    this.followUpSummary = data.summary || null;
+                    this.followUpLate = data.later === true;
+                    this.followUpQuestions = !this.followUpLate && Array.isArray(data.questions) ? data.questions.slice(0, 2) : [];
+                    // Links are supplied by the host, but must never execute script.
+                    try {
+                        const url = new URL(data.edit_url, location.href);
+                        this.editUrl = data.edit_url && ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+                    } catch (_) {}
+                    this.followUpState = this.followUpQuestions.length ? 'question' : 'done';
+                } catch (_) {
+                    if (this.sentReport !== report) return;
+                    this.followUpLate = true;
+                    this.followUpState = 'done';
+                } finally { clearTimeout(timer); }
+            },
+            currentQuestion() {
+                return this.followUpQuestions[this.questionIndex] || {};
+            },
+            answerQuestion(answer, skipped = false) {
+                if (this.answering || (!skipped && !String(answer || '').trim())) return;
+                this.answering = true;
+                this.selectedAnswer = answer;
+                const report = this.sentReport;
+                this.postJson(this.followUpUrl.replace(/\/$/, '') + '/answers', {
+                    report, question_id: this.currentQuestion().id,
+                    answer: skipped ? null : String(answer).trim().slice(0, 500), skipped,
+                }).catch(() => {});
+                setTimeout(() => {
+                    if (this.sentReport !== report) return;
+                    this.questionIndex++;
+                    this.otherAnswer = false;
+                    this.answerText = '';
+                    this.selectedAnswer = null;
+                    this.answering = false;
+                    if (this.questionIndex >= this.followUpQuestions.length) this.followUpState = 'done';
+                }, 250);
             },
 
             sessionMessage: 'Je bent uitgelogd. Log opnieuw in, dan kun je verder waar je was.',
@@ -564,6 +857,8 @@
             },
 
             async post(url, body, headers) {
+                // Never attach a session CSRF secret to an external endpoint.
+                if (new URL(url, location.href).origin !== location.origin) throw new Error('Feedback-adres moet op dezelfde website staan.');
                 const send = (token) => fetch(url, {
                     method: 'POST',
                     redirect: 'manual',
@@ -638,7 +933,8 @@
 
             collectSessionData() {
                 return {
-                    url: this.currentUrl(),
+                    url: this.pageContext?.url || this.currentUrl(),
+                    ...(this.pageContext ? { title: this.pageContext.title } : {}),
                     userAgent: navigator.userAgent,
                     viewport: { width: window.innerWidth, height: window.innerHeight },
                     screen: { width: window.screen.width, height: window.screen.height },

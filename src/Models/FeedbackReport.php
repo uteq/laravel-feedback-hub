@@ -15,6 +15,8 @@ class FeedbackReport extends Model
     protected function casts(): array
     {
         return [
+            'activity' => 'array',
+            'recording_seconds' => 'float',
             'element_rect' => 'array',
             'session_data' => 'array',
             'console_errors' => 'array',

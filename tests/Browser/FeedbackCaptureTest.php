@@ -111,7 +111,15 @@ it('uses only Flux when the host provides it', function (): void {
 
 it('submits through the package and dispatches one compatible success toast', function (): void {
     $page = feedbackPage();
-    submitBrowserFeedback($page);
+    $page->script("window.posted = []; const fetchBefore = window.fetch; window.fetch = (url, options) => { if (options?.method === 'POST') window.posted.push({url: String(url), body: JSON.parse(options.body)}); return fetchBefore(url, options); }");
+    $page->click('button[aria-label="Feedback geven"]')->click('button:has-text("Schermafbeelding")')
+        ->assertVisible('.fh-types')->assertVisible('#feedback-hub-title')
+        ->assertScript("document.querySelector('button.fh-primary').disabled", true);
+    $page->fill('#feedback-hub-title', 'Knop werkt niet')->fill('#feedback-hub-description', 'De knop reageert niet.')
+        ->click('button:has-text("Versturen")');
+    $page->assertScript('window.posted.length', 1)
+        ->assertScript("Object.keys(window.posted[0].body).includes('activity')", false)
+        ->assertNotPresent('.fh-modal:visible');
     $page->assertScript('window.toastEvents.length === 1 && window.mortelEvents.length === 1')
         ->assertScript('window.toastEvents[0].cancelable')
         ->assertScript('window.mortelEvents[0].heading', 'Feedback verzonden')

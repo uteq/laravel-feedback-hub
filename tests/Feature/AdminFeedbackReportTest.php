@@ -165,3 +165,19 @@ it('hides the intent panel when intent holds only empty values', function (): vo
         ->assertOk()
         ->assertDontSee('Intent');
 });
+
+it('escapes activity content and renders older incomplete entries safely', function (): void {
+    $user = User::query()->create(['name' => 'Tester', 'email' => 'activity-admin@example.test']);
+    $report = FeedbackReport::query()->create([
+        'type' => 'bug', 'title' => 'Activity', 'page_url' => 'https://example.test',
+        'activity' => [
+            ['t' => 0.5, 'type' => 'click', 'label' => '<script>alert(1)</script>', 'selector' => '<img src=x onerror=alert(1)>', 'path' => '/<unsafe>'],
+            ['type' => 'navigate'],
+            [],
+        ],
+    ]);
+    $this->actingAs($user)->get(route('feedback-hub.show', $report))->assertOk()
+        ->assertSee('<script>alert(1)</script>')
+        ->assertSee('<img src=x onerror=alert(1)>')
+        ->assertDontSee('<script>alert(1)</script>', escape: false);
+});
