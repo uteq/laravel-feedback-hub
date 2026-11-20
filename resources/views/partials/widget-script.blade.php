@@ -31,8 +31,23 @@
             endpoint: config.endpoint,
             chatEndpoint: config.chatEndpoint,
             csrfEndpoint: config.csrfEndpoint,
-            chatEnabled: Boolean(config.chatEnabled),
-            mode: config.chatEnabled ? 'chat' : 'form',
+            followUpUrl: config.followUpUrl || null,
+            followUpWaitMs: Math.max(1, Number(config.followUpWaitMs) || 3000),
+            contextLabel: config.contextLabel || '',
+            sentReport: null,
+            followUpState: null,
+            followUpSummary: null,
+            followUpQuestions: [],
+            questionIndex: 0,
+            selectedAnswer: null,
+            answering: false,
+            otherAnswer: false,
+            answerText: '',
+            editUrl: null,
+            followUpLate: false,
+            activity: [],
+            chatEnabled: !config.followUpUrl && Boolean(config.chatEnabled),
+            mode: !config.followUpUrl && config.chatEnabled ? 'chat' : 'form',
             chatMessages: [],
             chatInput: '',
             chatBusy: false,
@@ -84,9 +99,13 @@
 
             // With video available the person first picks a screenshot or a video; otherwise straight to the screenshot.
             start() {
+                if (this.followUpUrl && !this.sentReport && (this.description || this.videoUrl || this.screenshot)) {
+                    this.openModal();
+                    return;
+                }
                 this.reset();
 
-                if (this.canRecordVideo()) {
+                if (this.canRecordVideo() || config.myFeedbackUrl) {
                     this.showChoice = true;
                     return;
                 }
@@ -106,8 +125,46 @@
             },
 
             close() {
+                if (!this.showModal) return;
+                this.closeModal();
+                if (this.followUpUrl && !this.sentReport) return;
+                if (this.sentReport && this.followUpState !== 'done') {
+                    this.notify('Verstuurd. Terug te vinden bij Mijn feedback.', '', 'success');
+                }
+                this.reset();
+            },
+
+            discardDraft() {
+                const draft = {};
+                ['description', 'screenshot', 'elementSelector', 'elementRect', 'sessionData', 'consoleErrors', 'networkRequests', 'formState', 'activity', 'recordingSeconds'].forEach(key => draft[key] = this[key]);
+                draft.video = media.video;
                 this.closeModal();
                 this.reset();
+                media.draft = draft;
+                this.undoDraft = true;
+                setTimeout(() => {
+                    if (media.draft === draft) { this.undoDraft = null; media.draft = null; }
+                }, 8000);
+            },
+            undoDraft: null,
+            restoreDraft() {
+                const draft = media.draft;
+                if (!draft) return;
+                const { video: blob, ...fields } = draft;
+                Object.assign(this, fields);
+                if (blob) { media.video = blob; this.videoUrl = URL.createObjectURL(blob); }
+                this.undoDraft = null;
+                media.draft = null;
+                this.openModal();
+            },
+            contextText() {
+                if (this.contextLabel) return this.contextLabel;
+                let label = '';
+                try {
+                    const el = this.elementSelector && document.querySelector(this.elementSelector);
+                    label = el?.getAttribute('aria-label') || el?.labels?.[0]?.textContent || el?.innerText || '';
+                } catch (_) {}
+                return [this.redactText(label).slice(0, 60), document.title].filter(Boolean).join(' · ');
             },
 
             handleCapture(detail) {
@@ -219,11 +276,60 @@
 
                 this.recordingSeconds = 0;
                 this.recording = true;
+                this.startActivity();
                 recorder.start(1000);
                 media.timer = setInterval(() => {
                     this.recordingSeconds++;
                     if (this.recordingSeconds >= this.videoMaxSeconds) this.stopRecording();
                 }, 1000);
+            },
+
+            startActivity() {
+                this.stopActivity?.();
+                this.activity = [];
+                media.startedAt = performance.now();
+                let lastUrl = location.href;
+                const append = (type, el) => {
+                    if (this.activity.length >= 500) return;
+                    const control = el?.closest('button,a,input,select,textarea,[role="button"],[contenteditable]') || el;
+                    // Never read a field's value or editable content, including input[type=button].
+                    const label = control?.getAttribute('aria-label')
+                        || control?.labels?.[0]?.textContent
+                        || (control?.matches('input,textarea,select,[contenteditable]') ? '' : control?.innerText) || '';
+                    this.activity.push({
+                        t: Math.round((performance.now() - media.startedAt) / 100) / 10,
+                        type,
+                        label: this.redactText(label).replace(/\s+/g, ' ').trim().slice(0, 60),
+                        selector: (control ? window.FeedbackHubInspector?.getSelector(control) || '' : '').slice(0, 200),
+                        path: this.redactText(location.pathname).slice(0, 500),
+                    });
+                };
+                const click = event => {
+                    if (!(event.target instanceof Element) || event.target.closest('.fh-widget, [data-feedback-hub-recording]')) return;
+                    append('click', event.target);
+                };
+                const navigate = () => {
+                    if (lastUrl === location.href) return;
+                    lastUrl = location.href;
+                    append('navigate', null);
+                };
+                const originals = {};
+                const wrappers = {};
+                ['pushState', 'replaceState'].forEach(name => {
+                    originals[name] = history[name];
+                    wrappers[name] = function (...args) { const result = originals[name].apply(this, args); navigate(); return result; };
+                    history[name] = wrappers[name];
+                });
+                document.addEventListener('click', click, true);
+                document.addEventListener('livewire:navigated', navigate);
+                window.addEventListener('popstate', navigate);
+                this.stopActivity = () => {
+                    document.removeEventListener('click', click, true);
+                    document.removeEventListener('livewire:navigated', navigate);
+                    window.removeEventListener('popstate', navigate);
+                    Object.keys(originals).forEach(name => { if (history[name] === wrappers[name]) history[name] = originals[name]; });
+                    this.stopActivity = null;
+                };
             },
 
             stopRecording() {
@@ -239,6 +345,8 @@
                 media.leaveGuard = null;
                 media.recorder = null;
                 this.stopStreams();
+                this.stopActivity?.();
+                this.recordingSeconds = Math.round((performance.now() - media.startedAt) / 100) / 10;
                 this.recording = false;
 
                 const chunks = media.chunks;
@@ -415,6 +523,20 @@
                 }
                 this.removeVideo();
                 this.showChoice = false;
+                this.undoDraft = null;
+                media.draft = null;
+                this.sentReport = null;
+                this.followUpState = null;
+                this.followUpSummary = null;
+                this.followUpQuestions = [];
+                this.questionIndex = 0;
+                this.answering = false;
+                this.otherAnswer = false;
+                this.answerText = '';
+                this.selectedAnswer = null;
+                this.editUrl = null;
+                this.followUpLate = false;
+                this.activity = [];
                 this.error = '';
                 this.type = 'bug';
                 this.title = '';
@@ -498,7 +620,12 @@
             },
 
             async submit() {
-                if (!this.title || this.submitting) return;
+                if (this.followUpUrl) {
+                    if (!this.description.trim() && !media.video) return;
+                    this.title = this.description.trim().slice(0, 80) || 'Video-feedback';
+                    this.type = 'bug';
+                }
+                if (!this.title || this.submitting || this.sentReport) return;
 
                 this.error = '';
                 this.submitting = true;
@@ -520,7 +647,11 @@
                         intent: this.intent,
                         transcript: this.chatMessages,
                     });
-                    if (videoUpload) payload.video_upload = videoUpload;
+                    if (videoUpload) {
+                        payload.video_upload = videoUpload;
+                        payload.activity = this.activity;
+                        payload.recording_seconds = this.recordingSeconds;
+                    }
 
                     const response = await this.postJson(this.endpoint, payload);
 
@@ -532,6 +663,12 @@
                         throw new Error(data.message || 'Feedback kon niet worden verstuurd');
                     }
 
+                    if (this.followUpUrl) {
+                        this.sentReport = data.id;
+                        this.followUpState = 'waiting';
+                        this.loadFollowUp(data.id);
+                        return;
+                    }
                     this.close();
                     this.notify('Feedback verzonden', data.reference ? `Referentie: ${data.reference}` : '', 'success');
                 } catch (error) {
@@ -541,6 +678,54 @@
                     this.uploadProgress = null;
                     this.submitting = false;
                 }
+            },
+
+            async loadFollowUp(report) {
+                let timer;
+                try {
+                    const data = await Promise.race([
+                        this.postJson(this.followUpUrl, { report }).then(async response => {
+                            if (!response.ok) throw new Error('follow-up');
+                            return response.json();
+                        }),
+                        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), this.followUpWaitMs); }),
+                    ]);
+                    if (this.sentReport !== report) return;
+                    this.followUpSummary = data.summary || null;
+                    this.followUpQuestions = Array.isArray(data.questions) ? data.questions.slice(0, 2) : [];
+                    // Links are supplied by the host, but must never execute script.
+                    try {
+                        const url = new URL(data.edit_url, location.href);
+                        this.editUrl = data.edit_url && ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+                    } catch (_) {}
+                    this.followUpState = this.followUpQuestions.length ? 'question' : 'done';
+                } catch (_) {
+                    if (this.sentReport !== report) return;
+                    this.followUpLate = true;
+                    this.followUpState = 'done';
+                } finally { clearTimeout(timer); }
+            },
+            currentQuestion() {
+                return this.followUpQuestions[this.questionIndex] || {};
+            },
+            answerQuestion(answer, skipped = false) {
+                if (this.answering || (!skipped && !String(answer || '').trim())) return;
+                this.answering = true;
+                this.selectedAnswer = answer;
+                const report = this.sentReport;
+                this.postJson(this.followUpUrl.replace(/\/$/, '') + '/answers', {
+                    report, question_id: this.currentQuestion().id,
+                    answer: skipped ? null : String(answer).trim().slice(0, 500), skipped,
+                }).catch(() => {});
+                setTimeout(() => {
+                    if (this.sentReport !== report) return;
+                    this.questionIndex++;
+                    this.otherAnswer = false;
+                    this.answerText = '';
+                    this.selectedAnswer = null;
+                    this.answering = false;
+                    if (this.questionIndex >= this.followUpQuestions.length) this.followUpState = 'done';
+                }, 250);
             },
 
             sessionMessage: 'Je bent uitgelogd. Log opnieuw in, dan kun je verder waar je was.',

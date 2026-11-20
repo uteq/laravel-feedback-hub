@@ -1,4 +1,4 @@
-@props(['floating' => true])
+@props(['floating' => true, 'followUpUrl' => null, 'followUpWaitMs' => 3000, 'contextLabel' => null, 'myFeedbackUrl' => null, 'myFeedbackBadge' => 0])
 
 @php($chatEnabled = \Uteq\FeedbackHub\Support\FeedbackAiAvailability::available())
 @php($video = [
@@ -54,6 +54,21 @@
             .fh-stop { border: 0; border-radius: 999px; background: white; color: #172026; padding: 7px 14px; font: inherit; font-weight: 700; cursor: pointer; }
             @keyframes fh-pulse { 50% { opacity: .35; } }
             .fh-error { margin: 0; color: #b91c1c; font-size: 13px; line-height: 1.4; }
+            .fh-draft-toast { position:fixed; right:24px; bottom:92px; z-index:75; display:flex; gap:12px; align-items:center; border:1px solid #e7eaee; border-radius:8px; padding:12px; background:white; box-shadow:0 16px 34px rgba(15,23,42,.2); }
+            .fh-progress { height:4px; background:#e2e8f0; border-radius:999px; overflow:hidden; margin-top:10px; }
+            .fh-progress span { display:block; height:100%; background:#135d66; }
+            .fh-muted { color: #64748b; font-size: 13px; line-height: 1.5; }
+            .fh-confirm { display:flex; gap:12px; align-items:center; }
+            .fh-sent { display:flex; gap:8px; align-items:center; font-weight:650; color: #15803d; font-size: 14px; margin: 0 0 18px; }
+            .fh-answer { display: flex; justify-content: space-between; width: 100%; text-align: left; margin: 8px 0; padding: 12px 14px; border-color: #d7dde5; border-radius: 8px; background: #f8fafc; font-size: 14px; }
+            .fh-qsub { color:#64748b; font-size:13px; margin:0 0 14px; }
+            .fh-q { font-size:18px; font-weight:650; margin:0 0 4px; line-height:1.35; }
+            .fh-answer.is-active { border-color:#135d66; background:#edf7f8; color:#0f4d55; }
+            .fh-summary { margin-top: 20px; background: #f1f5f9; border-radius: 8px; padding: 12px 14px; }
+            .fh-summary dl { display: grid; grid-template-columns: 65px 1fr; gap: 8px; font-size: 14px; margin-bottom: 0; }
+            .fh-summary dt { color: #64748b; } .fh-summary dd { margin: 0; white-space: pre-wrap; }
+            .fh-badge { border-radius: 999px; background: #dc2626; color: white; padding: 2px 6px; font-size: 12px; }
+            .fh-button .fh-badge { position: absolute; right: -2px; top: -2px; }
             @media (max-width: 480px) {
                 .fh-backdrop { padding: 12px; }
                 .fh-modal { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
@@ -74,10 +89,11 @@
          wrapper: on the x-data element itself Livewire would initialise the component a second time. --}}
     <div x-persist="feedback-hub">
     <div
-        x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')), chatEndpoint: @js(route('feedback-hub.chat'), JSON_UNESCAPED_SLASHES), csrfEndpoint: @js(route('feedback-hub.csrf'), JSON_UNESCAPED_SLASHES), chatEnabled: {{ $chatEnabled ? 'true' : 'false' }}, video: @js($video, JSON_UNESCAPED_SLASHES) })"
+        x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')), followUpUrl: @js($followUpUrl), followUpWaitMs: @js($followUpWaitMs), contextLabel: @js($contextLabel), myFeedbackUrl: @js($myFeedbackUrl), chatEndpoint: @js(route('feedback-hub.chat'), JSON_UNESCAPED_SLASHES), csrfEndpoint: @js(route('feedback-hub.csrf'), JSON_UNESCAPED_SLASHES), chatEnabled: {{ $chatEnabled ? 'true' : 'false' }}, video: @js($video, JSON_UNESCAPED_SLASHES) })"
         x-on:feedback-hub-captured.window="handleCapture($event.detail)"
         x-on:feedback-hub-screenshot-captured.window="handleScreenshot($event.detail)"
         x-on:open-feedback-hub.window="start"
+        class="fh-widget"
         data-feedback-hub-widget
     >
         <div x-on:click.outside="showChoice = false" x-on:keydown.escape.window="showChoice = false">
@@ -86,14 +102,22 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg>
                 <span><span class="fh-choice-title">Schermafbeelding</span><span class="fh-choice-text">Wijs aan waar het om gaat</span></span>
             </button>
-            <button type="button" class="fh-choice-option" role="menuitem" x-on:click="startVideo">
+            <button type="button" class="fh-choice-option" role="menuitem" x-show="canRecordVideo()" x-on:click="startVideo">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="m16 10 5-3v10l-5-3" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
                 <span><span class="fh-choice-title">Video opnemen</span><span class="fh-choice-text">Laat zien wat er gebeurt, ook over meerdere pagina's. Hooguit <span x-text="videoLimitLabel()"></span>.</span></span>
             </button>
+            @if($myFeedbackUrl)
+                <a href="{{ $myFeedbackUrl }}" class="fh-choice-option" role="menuitem" style="text-decoration: none; border-top: 1px solid #e7eaee">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h16v13H8l-4 4V4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                    <span class="fh-choice-title">Mijn feedback</span>
+                    @if($myFeedbackBadge > 0)<span class="fh-badge">{{ (int) $myFeedbackBadge }}</span>@endif
+                </a>
+            @endif
         </div>
 
         @if ($floating)
             <button type="button" class="fh-button" x-on:click="start" x-show="!showModal && !recording" aria-label="Feedback geven">
+                @if($myFeedbackBadge > 0)<span class="fh-badge">{{ (int) $myFeedbackBadge }}</span>@endif
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M4 13.5V10a3 3 0 0 1 3-3h3l6-3v16l-6-3H7a3 3 0 0 1-3-3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
                     <path d="M8 17v2.2c0 .8.6 1.4 1.4 1.4h.8c.8 0 1.4-.6 1.4-1.4V18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -103,7 +127,11 @@
         @endif
         </div>
 
-        <div class="fh-recording" x-cloak x-show="recording" role="status" data-feedback-hub-recording>
+        <div class="fh-draft-toast" x-cloak x-show="undoDraft !== null" role="status">
+            <span class="fh-muted">Weggegooid</span>
+            <button type="button" class="fh-type" x-on:click="restoreDraft">Ongedaan maken</button>
+        </div>
+        <div class="fh-recording"  x-cloak x-show="recording" role="status" data-feedback-hub-recording>
             <span class="fh-record-dot" aria-hidden="true"></span>
             <span>Opname loopt <span x-text="recordingClock()"></span></span>
             <button type="button" class="fh-stop" x-on:click="stopRecording">Stop</button>
@@ -112,15 +140,16 @@
         <div class="fh-backdrop" x-cloak x-show="showModal" x-transition.opacity x-on:click.self="close" x-on:keydown.escape.window="close">
             <section class="fh-modal" x-show="showModal" x-transition x-on:click.stop role="dialog" aria-modal="true" aria-labelledby="feedback-hub-heading">
                 <header class="fh-header">
-                    <h2 id="feedback-hub-heading" class="fh-title">Feedback geven</h2>
+                    <h2 id="feedback-hub-heading" class="fh-title">Feedback geven <span class="fh-muted" x-show="followUpState === 'question'" x-text="(questionIndex + 1) + '/' + followUpQuestions.length"></span></h2>
                     <button type="button" class="fh-icon" x-on:click="close" aria-label="Sluiten">×</button>
                 </header>
 
-                <div class="fh-body">
+                <div class="fh-body" x-show="!sentReport">
                     <template x-if="videoUrl">
                         <div class="fh-field">
-                            <label class="fh-label">Video</label>
+                            @unless($followUpUrl)<label class="fh-label">Video</label>@endunless
                             <video class="fh-video" :src="videoUrl" controls playsinline></video>
+                            @if($followUpUrl)<div class="fh-progress" x-show="submitting && uploadProgress !== null" role="progressbar" aria-label="Video versturen" :aria-valuenow="uploadProgress" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: (uploadProgress || 0) + '%' }"></span></div>@endif
                             <div class="fh-video-actions">
                                 <button type="button" class="fh-type" x-on:click="startRecording">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v4.5h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -135,7 +164,7 @@
                     </template>
 
                     <div class="fh-field" x-show="screenshot">
-                        <label class="fh-label">Screenshot</label>
+                        @unless($followUpUrl)<label class="fh-label">Screenshot</label>@endunless
                         <img class="fh-shot" :src="screenshot" alt="Feedback screenshot">
                     </div>
 
@@ -148,7 +177,7 @@
                                 <div class="fh-bubble is-busy" x-show="chatBusy">Even denken…</div>
                             </div>
                             <form class="fh-chat-form" x-on:submit.prevent="sendTurn" x-effect="chatMessages.length; $nextTick(() => $el.scrollIntoView({ block: 'nearest' }))">
-                                <input id="feedback-hub-chat-input" class="fh-input" type="text" x-model="chatInput" maxlength="5000" placeholder="Typ je antwoord" aria-label="Je antwoord" :disabled="chatBusy" autocomplete="off">
+                                <input id="feedback-hub-chat-input" class="fh-input" type="text" x-model="chatInput" maxlength="5000" @if($followUpUrl) :placeholder="videoUrl ? 'Typ het hier, of zeg het in de video' : 'Bijvoorbeeld: hier moet ook de tijd bij'" @endif placeholder="Typ je antwoord" aria-label="Je antwoord" :disabled="chatBusy" autocomplete="off">
                                 <button type="submit" class="fh-primary" :disabled="chatBusy || !chatInput.trim()">Stuur</button>
                             </form>
                         </div>
@@ -156,6 +185,7 @@
 
                     <template x-if="mode !== 'chat'">
                         <div>
+                            @unless($followUpUrl)
                             <div class="fh-field">
                                 <label class="fh-label">Type</label>
                                 <div class="fh-types">
@@ -170,11 +200,13 @@
                                 <input id="feedback-hub-title" class="fh-input" type="text" x-model="title" maxlength="255" placeholder="Korte beschrijving">
                             </div>
 
+                            @endunless
                             <div class="fh-field">
-                                <label class="fh-label" for="feedback-hub-description">Beschrijving</label>
-                                <textarea id="feedback-hub-description" class="fh-textarea" rows="5" x-model="description" maxlength="5000" placeholder="Wat verwachtte je en wat gebeurde er?"></textarea>
+                                <label class="fh-label" for="feedback-hub-description">{{ $followUpUrl ? "Wat moet er anders?" : "Beschrijving" }}</label>
+                                <textarea id="feedback-hub-description" class="fh-textarea" rows="{{ $followUpUrl ? 4 : 5 }}" :disabled="!!followUpUrl && submitting" x-model="description" maxlength="5000" @if($followUpUrl) :placeholder="videoUrl ? 'Typ het hier, of zeg het in de video' : 'Bijvoorbeeld: hier moet ook de tijd bij'" @endif placeholder="{{ $followUpUrl ? "Bijvoorbeeld: hier moet ook de tijd bij" : "Wat verwachtte je en wat gebeurde er?" }}"></textarea>
                             </div>
 
+                            @if($followUpUrl)<p class="fh-muted">Gaat mee: <span x-text="contextText()"></span></p>@endif
                             <template x-if="mode === 'summary'">
                                 <div>
                                     <div class="fh-field">
@@ -192,7 +224,7 @@
                                 </div>
                             </template>
 
-                            <div class="fh-field" x-show="elementSelector">
+                            <div class="fh-field" x-show="elementSelector && !followUpUrl">
                                 <label class="fh-label">Geselecteerd element</label>
                                 <code class="fh-code" x-text="elementSelector"></code>
                             </div>
@@ -202,13 +234,59 @@
                     <p class="fh-error" x-cloak x-show="error" x-text="error" role="alert"></p>
                 </div>
 
-                <footer class="fh-footer">
-                    <button type="button" class="fh-secondary" x-on:click="close">Annuleren</button>
-                    <button type="button" class="fh-primary" x-show="mode !== 'chat'" x-on:click="submit" :disabled="submitting || !title">
-                        <span x-show="!submitting">Versturen</span>
-                        <span x-show="submitting" data-feedback-hub-submit-label x-text="uploadProgress === null ? 'Bezig...' : `Video versturen ${uploadProgress}%`"></span>
+                <footer class="fh-footer" x-show="!sentReport">
+                    @if($followUpUrl)
+                        <button type="button" class="fh-icon" x-show="!sentReport" x-on:click="discardDraft" :disabled="submitting" aria-label="Weggooien" style="margin-right:auto">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" stroke="currentColor" stroke-width="1.8"/></svg>
+                        </button>
+                    @endif
+                    @unless($followUpUrl)<button type="button" class="fh-secondary" x-on:click="close">Annuleren</button>@endunless
+                    <button type="button" class="fh-primary" x-show="mode !== 'chat'" x-on:click="submit" :disabled="submitting || (followUpUrl ? (!description.trim() && !videoUrl) : !title)">
+                        <span x-show="!submitting" x-text="followUpUrl && error ? 'Opnieuw versturen' : 'Versturen'"></span>
+                        <span x-show="submitting" data-feedback-hub-submit-label x-text="followUpUrl ? 'Versturen…' : (uploadProgress === null ? 'Bezig...' : `Video versturen ${uploadProgress}%`)"></span>
                     </button>
                 </footer>
+                @if($followUpUrl)
+                <div class="fh-body" x-cloak x-show="sentReport" aria-live="polite">
+                    <div x-show="followUpState !== 'question'" class="fh-confirm">
+                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" style="color:#15803d;flex:none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="m8 12 3 3 5-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <div><p class="fh-q">Verstuurd naar Uteq</p><span class="fh-muted">Je hoeft niets meer te doen.</span></div>
+                    </div>
+                    <p class="fh-sent" x-show="followUpState === 'question'"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="m8 12 3 3 5-6" stroke="currentColor" stroke-width="1.8"/></svg><span x-text="questionIndex === 0 && followUpQuestions.length === 2 ? 'Verstuurd. Nog twee korte vragen.' : 'Verstuurd. Nog één vraag.'"></span></p>
+                    <div x-show="followUpState === 'waiting'">
+                        <p>Even kijken of we nog iets moeten vragen…</p>
+                    </div>
+                    <div x-show="followUpState === 'question'">
+                        <h3 class="fh-q" x-text="currentQuestion().question"></h3>
+                        <p class="fh-qsub" x-show="currentQuestion().hint" x-text="currentQuestion().hint"></p>
+                        <template x-for="option in (currentQuestion().options || [])" :key="option">
+                            <button type="button" class="fh-type fh-answer" :class="{ 'is-active': selectedAnswer === option }" :disabled="answering" x-on:click="answerQuestion(option)"><span x-text="option"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6" stroke="#94a3b8" stroke-width="1.8"/></svg></button>
+                        </template>
+                        <button type="button" class="fh-type fh-answer" x-show="!otherAnswer" x-on:click="otherAnswer = true; $nextTick(() => $refs.otherAnswer.focus())">Iets anders<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 4 5 5-11 11H4v-5L15 4Z" stroke="#94a3b8" stroke-width="1.8"/></svg></button>
+                        <form x-show="otherAnswer" x-on:submit.prevent="answerQuestion(answerText)" class="fh-chat-form">
+                            <input class="fh-input" x-ref="otherAnswer" x-model="answerText" maxlength="500" aria-label="Je antwoord" placeholder="Vertel het in je eigen woorden…">
+                            <button class="fh-primary" type="submit" :disabled="answering || !answerText.trim()">Verstuur</button>
+                        </form>
+                    </div>
+                    <div x-show="followUpState === 'done'">
+                        <div class="fh-summary" x-show="followUpSummary">
+                            <span class="fh-label">Zo hebben we het begrepen</span>
+                            <strong x-text="followUpSummary?.title"></strong>
+                            <dl>
+                                <dt>Je zag</dt><dd x-text="followUpSummary?.saw"></dd>
+                                <dt>Je wilt</dt><dd x-text="followUpSummary?.wants"></dd>
+                                <dt>Waar</dt><dd x-text="followUpSummary?.where"></dd>
+                            </dl>
+                        </div>
+                        <p class="fh-muted" x-show="followUpLate">Heeft Uteq nog een vraag? Die komt in je inbox.</p>
+                    </div>
+                </div>
+                <footer class="fh-footer" x-cloak x-show="sentReport">
+                    <button type="button" class="fh-secondary" x-show="followUpState === 'question'" x-on:click="answerQuestion(null, true)" :disabled="answering">Overslaan</button>
+                    <a class="fh-secondary" x-show="followUpState === 'done' && editUrl" :href="editUrl" style="margin-right:auto;text-decoration:none">Aanpassen</a>
+                    <button type="button" class="fh-primary" x-show="followUpState !== 'question'" x-on:click="close">Klaar</button>
+                </footer>
+                @endif
             </section>
         </div>
     </div>

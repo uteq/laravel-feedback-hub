@@ -18,6 +18,7 @@ beforeEach(function (): void {
     Route::get('/_fhv/blank', fn () => '<!DOCTYPE html><html><body>Blank</body></html>');
     Route::middleware('web')->get('/_fhv/{page}/{media?}', function (string $page, string $media = 'canvas') use ($user) {
         test()->actingAs($user);
+        $component = $media === 'follow' ? '<x-feedback-hub::floating-button follow-up-url="/_video-follow-up" />' : '<x-feedback-hub::floating-button />';
 
         return BrowserTestLayout::render(<<<HTML
             <script>
@@ -74,7 +75,7 @@ beforeEach(function (): void {
             </script>
             <h1>Pagina {$page}</h1>
             <a href="/_fhv/second/{$media}" wire:navigate>Naar de tweede pagina</a>
-            <x-feedback-hub::floating-button />
+            {$component}
             HTML);
     });
 });
@@ -128,7 +129,8 @@ it('keeps recording while the person moves to another page', function (): void {
     $page->click('a:has-text("Naar de tweede pagina")')
         ->assertSee('Pagina second')
         ->assertVisible('[data-feedback-hub-recording]')
-        ->assertScript('window.displayStream.getVideoTracks()[0].readyState', 'live');
+        ->assertScript('window.displayStream.getVideoTracks()[0].readyState', 'live')
+        ->assertScript("document.querySelector('[data-feedback-hub-widget]')._x_dataStack[0].activity.some(e => e.type === 'navigate' && e.path === '/_fhv/second/canvas')");
 
     $page->script('new Promise(resolve => setTimeout(resolve, 600))');
     $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
@@ -155,6 +157,10 @@ it('records the screen, shows the recording and sends it with the feedback', fun
         ->assertNotPresent('[data-feedback-hub-choice]:visible')
         ->assertNotPresent('button[aria-label="Feedback geven"]:visible');
 
+    $page->script("window.FeedbackHubInspector = { getSelector: el => el.id ? '#' + el.id : el.tagName.toLowerCase(), redactText: value => value }; document.body.insertAdjacentHTML('afterbegin', '<button id=outside>Opslaan</button><label for=private-field>Naam</label><input id=private-field value=never-record-this>')");
+    $page->click('#outside')->click('#private-field');
+    $page->script("history.pushState({}, '', '/_fhv/changed?token=private'); history.replaceState({}, '', '/_fhv/replaced'); history.back()");
+    $page->assertScript("document.querySelector('[data-feedback-hub-widget]')._x_dataStack[0].activity.some(e => e.type === 'navigate')");
     $page->script('new Promise(resolve => setTimeout(resolve, 1200))');
     $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
         ->assertScript('!!document.querySelector(".fh-modal video")?.src?.startsWith("blob:")')
@@ -174,6 +180,9 @@ it('records the screen, shows the recording and sends it with the feedback', fun
     expect($report->title)->toBe('Zo gaat het mis')
         ->and($report->video_mime)->toBeIn(['video/webm', 'video/mp4'])
         ->and($report->video_size)->toBeGreaterThan(1024);
+    expect(collect($report->activity)->pluck('type')->all())->toContain('click', 'navigate');
+    expect(json_encode($report->activity))->not->toContain('never-record-this', '?token', 'Stop');
+    expect($report->recording_seconds)->toBeGreaterThan(0);
     Storage::disk('local')->assertExists($report->video_path);
 });
 
@@ -316,4 +325,26 @@ it('retries a failed piece and shows how far sending is', function (): void {
     $report = FeedbackReport::query()->sole();
     expect($report->video_size)->toBeGreaterThan(1024);
     Storage::disk('local')->assertExists($report->video_path);
+});
+
+it('can submit video only through the opt-in follow-up window with activity', function (): void {
+    $page = videoFeedbackPage('follow');
+    $page->script(<<<'JS'
+        const widget = document.querySelector('[data-feedback-hub-widget]')._x_dataStack[0];
+        widget.followUpUrl = '/_video-follow-up';
+        const real = window.fetch;
+        window.fetch = (url, options) => String(url).endsWith('/_video-follow-up')
+            ? Promise.resolve(new Response(JSON.stringify({summary: null, questions: [], edit_url: null}), {headers: {'Content-Type': 'application/json'}}))
+            : real(url, options);
+        document.body.insertAdjacentHTML('afterbegin', '<button id="video-click">Planning</button>');
+    JS);
+    startVideo($page)->click('#video-click');
+    $page->script("history.pushState({}, '', '/_fhv/video-follow-up'); new Promise(resolve => setTimeout(resolve, 600))");
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
+        ->assertVisible('.fh-video')
+        ->click('button:has-text("Versturen")')->assertSee('Je hoeft niets meer te doen.');
+    $report = FeedbackReport::query()->sole();
+    expect($report->title)->toBe('Video-feedback')
+        ->and($report->description)->toBeNull()
+        ->and(collect($report->activity)->pluck('type')->all())->toContain('click', 'navigate');
 });

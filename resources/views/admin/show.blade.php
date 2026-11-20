@@ -64,6 +64,14 @@
                 <img src="{{ route('feedback-hub.screenshot', $report) }}" alt="Feedback screenshot">
             @endif
 
+            @if($report->activity)
+                <h2>Gezegd en geklikt</h2>
+                <ol>
+                    @foreach($report->activity as $entry)
+                        <li>{{ $entry['t'] }}s · {{ $entry['type'] === 'navigate' ? 'Pagina' : 'Klik' }} · {{ $entry['label'] }} · {{ $entry['path'] }} <code>{{ $entry['selector'] }}</code></li>
+                    @endforeach
+                </ol>
+            @endif
             <h2>Context</h2>
             <pre>{{ json_encode([
                 'element_selector' => $report->element_selector,

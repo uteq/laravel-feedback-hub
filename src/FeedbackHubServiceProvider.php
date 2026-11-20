@@ -35,6 +35,7 @@ class FeedbackHubServiceProvider extends ServiceProvider
             __DIR__.'/../database/migrations/2026_05_19_000000_create_feedback_hub_reports_table.php' => database_path((! $this->usesTenantDatabases() ? 'migrations/' : 'migrations/tenant/').'2026_05_19_000000_create_feedback_hub_reports_table.php'),
             __DIR__.'/../database/migrations/2026_09_15_000000_add_intent_to_feedback_hub_reports_table.php' => database_path((! $this->usesTenantDatabases() ? 'migrations/' : 'migrations/tenant/').'2026_09_15_000000_add_intent_to_feedback_hub_reports_table.php'),
             __DIR__.'/../database/migrations/2026_11_20_000000_add_video_to_feedback_hub_reports_table.php' => database_path((! $this->usesTenantDatabases() ? 'migrations/' : 'migrations/tenant/').'2026_11_20_000000_add_video_to_feedback_hub_reports_table.php'),
+            __DIR__.'/../database/migrations/2026_11_20_000001_add_activity_to_feedback_hub_reports_table.php' => database_path((! $this->usesTenantDatabases() ? 'migrations/' : 'migrations/tenant/').'2026_11_20_000001_add_activity_to_feedback_hub_reports_table.php'),
         ], 'feedback-hub-migrations');
 
         $this->publishes([

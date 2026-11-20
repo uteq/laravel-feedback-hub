@@ -231,3 +231,95 @@ to avoid a second toast from `mortel-toast`.
 
 Only sensitive input fields are blanked in screenshots; text on the page is not;
 cross-origin iframes and images without CORS remain empty.
+
+### Optional follow-up window (0.7)
+
+The default widget retains the title, type picker, optional intake chat and close-on-send flow.
+Enable the simpler, single-field form and the panel after sending explicitly:
+
+```blade
+<x-feedback-hub::floating-button
+    :follow-up-url="route('feedback.follow-up')"
+    :follow-up-wait-ms="3000"
+    context-label="Delivery planning"
+    :my-feedback-url="route('feedback.mine')"
+    :my-feedback-badge="2"
+/>
+```
+
+All new props are optional. `followUpUrl` defaults to null; `followUpWaitMs` to 3000.
+`contextLabel` defaults to the selected element's label plus the document title.
+`myFeedbackUrl` adds “Mijn feedback” to the choice menu; `myFeedbackBadge` (integer,
+default 0) shows a count when positive, including on the floating button.
+
+With `followUpUrl`, description is required unless a video is attached. The submitted
+type is `bug`; title is the first 80 characters of the description, or
+`Video-feedback`. Existing server validation still requires title. Closing before
+sending preserves the draft during this page session. The trash control discards
+the text with an undo action.
+
+The app owns and authenticates the follow-up endpoints. The package adds no routes,
+AI calls or configuration keys. After the report endpoint returns HTTP 201 with
+`id` (the report UUID), the widget sends JSON `{"report":"<uuid>"}` to
+`followUpUrl`, using the same CSRF/session handling as report submission.
+Respond with:
+
+```json
+{
+  "summary": {
+    "title": "Delivery time",
+    "saw": "Only a date",
+    "wants": "Also the time",
+    "where": "Delivery planning"
+  },
+  "questions": [
+    {
+      "id": "audience",
+      "topic": "Who",
+      "question": "Who needs to see this?",
+      "hint": null,
+      "options": ["Everyone", "Only me", "My team"]
+    }
+  ],
+  "edit_url": "/my-feedback/report-uuid"
+}
+```
+
+`summary` and `edit_url` may be null. Supply zero to two questions, each with
+three string options. Text is rendered as text, never HTML; edit links accept
+only HTTP(S). A timeout or failure finishes immediately with an inbox notice;
+the app must arrange any later inbox question. No polling occurs. Closing while
+waiting does not cancel the already saved report.
+
+Each answer is a separate JSON POST to `followUpUrl + '/answers'`:
+`{"report":"<uuid>","question_id":"audience","answer":"Everyone","skipped":false}`.
+A skip sends `answer:null, skipped:true`. Free text is limited to 500 characters.
+The next question appears after 250 ms even when saving the answer fails; the
+app should retain unanswered questions in its inbox. Authorize report ownership
+and validate question IDs and answers in the app.
+
+### Recording activity (0.7 migration required)
+
+Publish the package migrations again and run migrations in every application
+database (including tenant databases where applicable):
+
+```sh
+php artisan vendor:publish --tag=feedback-hub-migrations
+php artisan migrate
+```
+
+The new migration adds nullable `activity` (JSON, array cast) and
+`recording_seconds` (decimal seconds). Recording uploads submit up to 500 entries:
+
+```json
+{"t":1.2,"type":"click","label":"Save","selector":"#save","path":"/deliveries"}
+```
+
+Types are `click` and `navigate` (history changes and Livewire navigation).
+Times are seconds since recording started, rounded to one decimal. Labels use
+control text, aria-label or a field label, never field values (max 60 characters).
+Selectors are limited to 200 characters and paths to 500, without query or hash.
+Clicks inside the widget and recording controls are ignored. The server validates
+limits, removes query/hash from paths and sanitizes strings. Unknown activity keys
+are rejected. Activity is stored separately from `session_data` and shown on the
+admin detail page; it is never added to the GitHub issue body.
