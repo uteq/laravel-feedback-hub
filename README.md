@@ -117,11 +117,14 @@ exercise the endpoint.
 
 ## Screen recording
 
-The widget shows a "Neem je scherm op" button when the browser can record (`getDisplayMedia` and
-`MediaRecorder`). The modal hides while recording; a small bar shows the time and a Stop button.
-Recording stops on Stop, when the browser stops sharing, or after the maximum length. The person
-can watch the recording and remove it before sending. The microphone is optional: without permission
-the recording has no sound.
+When the browser can record (`getDisplayMedia` and `MediaRecorder`), the feedback button first asks
+"Schermafbeelding" (point at an element, as before) or "Video opnemen". A video starts right away and
+asks for this tab only where the browser supports it (`preferCurrentTab`, `displaySurface: 'browser'`,
+`monitorTypeSurfaces: 'exclude'`). A small bar shows the time and a Stop button. The widget is wrapped in
+`x-persist`, so with Livewire `wire:navigate` the recording keeps running across pages; a full page load
+asks for confirmation first. Recording stops on Stop, when the browser stops sharing, or after the maximum
+length. The person watches the recording, can record again or remove it, and sends it. The microphone is
+optional: without permission the recording has no sound.
 
 The recording travels in raw chunks (`POST feedback-hub/video/chunks?offset=…`, default 512 KB), so
 nginx's default 1 MB body limit and PHP's `upload_max_filesize` never apply. Chunks are staged per user in

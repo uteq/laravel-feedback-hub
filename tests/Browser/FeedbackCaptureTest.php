@@ -94,6 +94,7 @@ function feedbackPage(?string $mode = null): mixed
 function submitBrowserFeedback(mixed $page): void
 {
     $page->click('button[aria-label="Feedback geven"]')
+        ->click('button:has-text("Schermafbeelding")')
         ->fill('#feedback-hub-title', 'Knop werkt niet')
         ->fill('#feedback-hub-description', 'De knop reageert niet.')
         ->click('button:has-text("Versturen")');
@@ -159,7 +160,8 @@ it('captures a viewport PNG without a browser prompt and redacts only the clone'
     $page->assertScript('window.devicePixelRatio', 2)
         ->assertScript('window.scrollY', 400)
         ->assertScript('document.documentElement.scrollHeight > innerHeight + 2000');
-    $page->click('button[aria-label="Feedback geven"]');
+    $page->click('button[aria-label="Feedback geven"]')
+        ->click('button:has-text("Schermafbeelding")');
     $page->assertScript('window.scrollY', 400);
     $page->click('#capture-target');
     $page->assertScript('!!window.captured')

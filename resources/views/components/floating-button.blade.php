@@ -40,11 +40,16 @@
             .fh-bubble.is-busy { color: #64748b; font-style: italic; }
             .fh-chat-form { display: flex; align-items: center; gap: 8px; }
             .fh-chat-form .fh-input { flex: 1 1 auto; min-width: 0; }
-            .fh-record { display: inline-flex; align-items: center; gap: 8px; }
             .fh-record-dot { width: 10px; height: 10px; border-radius: 999px; background: #dc2626; }
-            .fh-hint { margin: 7px 0 0; color: #64748b; font-size: 13px; line-height: 1.4; }
             .fh-video { display: block; max-height: 260px; width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; background: #0f172a; }
-            .fh-link { margin-top: 6px; padding: 6px 0; }
+            .fh-video-actions { display: flex; gap: 16px; margin-top: 6px; }
+            .fh-link { padding: 6px 0; }
+            .fh-choice { position: fixed; right: 24px; bottom: 92px; z-index: 55; display: flex; flex-direction: column; gap: 4px; width: 260px; border: 1px solid rgba(15, 23, 42, .12); border-radius: 12px; background: white; padding: 6px; box-shadow: 0 20px 48px rgba(15, 23, 42, .2); }
+            .fh-choice-option { display: flex; align-items: flex-start; gap: 12px; border: 0; border-radius: 8px; background: transparent; padding: 10px 12px; color: #172026; text-align: left; font: inherit; cursor: pointer; }
+            .fh-choice-option:hover, .fh-choice-option:focus-visible { background: #edf7f8; outline: none; }
+            .fh-choice-option svg { flex: none; margin-top: 2px; color: #135d66; }
+            .fh-choice-title { display: block; font-size: 14px; font-weight: 700; }
+            .fh-choice-text { display: block; margin-top: 2px; color: #64748b; font-size: 13px; line-height: 1.35; }
             .fh-recording { position: fixed; left: 50%; bottom: 24px; z-index: 70; display: flex; align-items: center; gap: 12px; transform: translateX(-50%); border-radius: 999px; background: #172026; color: white; padding: 8px 8px 8px 16px; box-shadow: 0 16px 34px rgba(15, 23, 42, .3); font-size: 14px; font-variant-numeric: tabular-nums; }
             .fh-recording .fh-record-dot { animation: fh-pulse 1.2s ease-in-out infinite; }
             .fh-stop { border: 0; border-radius: 999px; background: white; color: #172026; padding: 7px 14px; font: inherit; font-weight: 700; cursor: pointer; }
@@ -66,6 +71,9 @@
         </script>
     @endonce
 
+    {{-- Livewire keeps this wrapper (and the recording in it) across wire:navigate. x-persist sits on a plain
+         wrapper: on the x-data element itself Livewire would initialise the component a second time. --}}
+    <div x-persist="feedback-hub">
     <div
         x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')), chatEndpoint: @js(route('feedback-hub.chat'), JSON_UNESCAPED_SLASHES), csrfEndpoint: @js(route('feedback-hub.csrf'), JSON_UNESCAPED_SLASHES), chatEnabled: {{ $chatEnabled ? 'true' : 'false' }}, video: @js($video, JSON_UNESCAPED_SLASHES) })"
         x-on:feedback-hub-captured.window="handleCapture($event.detail)"
@@ -73,6 +81,18 @@
         x-on:open-feedback-hub.window="start"
         data-feedback-hub-widget
     >
+        <div x-on:click.outside="showChoice = false" x-on:keydown.escape.window="showChoice = false">
+        <div class="fh-choice" x-cloak x-show="showChoice" x-transition.opacity role="menu" aria-label="Feedback geven" data-feedback-hub-choice>
+            <button type="button" class="fh-choice-option" role="menuitem" x-on:click="startScreenshot">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg>
+                <span><span class="fh-choice-title">Schermafbeelding</span><span class="fh-choice-text">Wijs aan waar het om gaat</span></span>
+            </button>
+            <button type="button" class="fh-choice-option" role="menuitem" x-on:click="startVideo">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="m16 10 5-3v10l-5-3" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                <span><span class="fh-choice-title">Video opnemen</span><span class="fh-choice-text">Laat zien wat er gebeurt, ook over meerdere pagina's. Hooguit <span x-text="videoLimitLabel()"></span>.</span></span>
+            </button>
+        </div>
+
         @if ($floating)
             <button type="button" class="fh-button" x-on:click="start" x-show="!showModal && !recording" aria-label="Feedback geven">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -82,6 +102,7 @@
                 </svg>
             </button>
         @endif
+        </div>
 
         <div class="fh-recording" x-cloak x-show="recording" role="status" data-feedback-hub-recording>
             <span class="fh-record-dot" aria-hidden="true"></span>
@@ -97,21 +118,14 @@
                 </header>
 
                 <div class="fh-body">
-                    <template x-if="videoUrl || canRecordVideo()">
+                    <template x-if="videoUrl">
                         <div class="fh-field">
                             <label class="fh-label">Video</label>
-                            <template x-if="videoUrl">
-                                <div>
-                                    <video class="fh-video" :src="videoUrl" controls playsinline></video>
-                                    <button type="button" class="fh-secondary fh-link" x-on:click="removeVideo">Video weghalen</button>
-                                </div>
-                            </template>
-                            <template x-if="!videoUrl">
-                                <div>
-                                    <button type="button" class="fh-type fh-record" x-on:click="startRecording"><span class="fh-record-dot" aria-hidden="true"></span>Neem je scherm op</button>
-                                    <p class="fh-hint">Laat zien wat er gebeurt en vertel het erbij. Je browser vraagt eerst toestemming. Hooguit <span x-text="videoLimitLabel()"></span>.</p>
-                                </div>
-                            </template>
+                            <video class="fh-video" :src="videoUrl" controls playsinline></video>
+                            <div class="fh-video-actions">
+                                <button type="button" class="fh-secondary fh-link" x-on:click="startRecording">Opnieuw opnemen</button>
+                                <button type="button" class="fh-secondary fh-link" x-on:click="removeVideo">Video weghalen</button>
+                            </div>
                         </div>
                     </template>
 
@@ -192,5 +206,6 @@
                 </footer>
             </section>
         </div>
+    </div>
     </div>
 @endauth

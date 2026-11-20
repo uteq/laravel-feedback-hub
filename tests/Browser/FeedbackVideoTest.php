@@ -16,7 +16,7 @@ beforeEach(function (): void {
     $user = User::query()->create(['name' => 'Browser Tester', 'email' => 'browser@example.test']);
 
     Route::get('/_fhv/blank', fn () => '<!DOCTYPE html><html><body>Blank</body></html>');
-    Route::middleware('web')->get('/_fhv/page/{media?}', function (string $media = 'canvas') use ($user) {
+    Route::middleware('web')->get('/_fhv/{page}/{media?}', function (string $page, string $media = 'canvas') use ($user) {
         test()->actingAs($user);
 
         return BrowserTestLayout::render(<<<HTML
@@ -44,7 +44,8 @@ beforeEach(function (): void {
                     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: undefined });
                 }
             </script>
-            <h1>Een pagina om op te nemen</h1>
+            <h1>Pagina {$page}</h1>
+            <a href="/_fhv/second/{$media}" wire:navigate>Naar de tweede pagina</a>
             <x-feedback-hub::floating-button />
             HTML);
     });
@@ -53,21 +54,77 @@ beforeEach(function (): void {
 function videoFeedbackPage(string $media = 'canvas'): mixed
 {
     $page = visit('/_fhv/blank');
-    $page->navigate('/_fhv/page/'.$media);
+    $page->navigate('/_fhv/first/'.$media);
     $page->assertScript("typeof window.Alpine !== 'undefined' && !!document.querySelector('[data-feedback-hub-widget]')._x_dataStack");
     $page->click('button[aria-label="Feedback geven"]');
 
     return $page;
 }
 
+function startVideo(mixed $page): mixed
+{
+    return $page->click('button:has-text("Video opnemen")')
+        ->assertVisible('[data-feedback-hub-recording]');
+}
+
+it('asks first whether the person wants a screenshot or a video', function (): void {
+    $page = videoFeedbackPage();
+
+    $page->assertVisible('[data-feedback-hub-choice]')
+        ->assertSee('Schermafbeelding')
+        ->assertSee('Video opnemen')
+        ->assertNotPresent('.fh-modal:visible');
+
+    $page->click('button:has-text("Schermafbeelding")')
+        ->assertNotPresent('[data-feedback-hub-choice]:visible')
+        ->assertVisible('.fh-modal')
+        ->assertScript('window.mediaCalls.display', 0);
+});
+
+it('asks only for this tab when the browser supports it', function (): void {
+    $page = videoFeedbackPage();
+    $page->script(<<<'JS'
+        const original = navigator.mediaDevices.getDisplayMedia;
+        navigator.mediaDevices.getDisplayMedia = (options) => { window.displayOptions = options; return original(options); };
+        JS);
+    startVideo($page)
+        ->assertScript('window.displayOptions.preferCurrentTab', true)
+        ->assertScript('window.displayOptions.video.displaySurface', 'browser')
+        ->assertScript('window.displayOptions.monitorTypeSurfaces', 'exclude');
+});
+
+it('keeps recording while the person moves to another page', function (): void {
+    $page = videoFeedbackPage();
+    startVideo($page);
+
+    $page->click('a:has-text("Naar de tweede pagina")')
+        ->assertSee('Pagina second')
+        ->assertVisible('[data-feedback-hub-recording]')
+        ->assertScript('window.displayStream.getVideoTracks()[0].readyState', 'live');
+
+    $page->script('new Promise(resolve => setTimeout(resolve, 600))');
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
+        ->assertScript('!!document.querySelector(".fh-modal video")?.src?.startsWith("blob:")')
+        ->assertScript('Alpine.$data(document.querySelector("[data-feedback-hub-widget]")).videoUrl !== null');
+});
+
+it('warns before the page is left while recording', function (): void {
+    $page = videoFeedbackPage();
+    $page->assertScript('(() => { const e = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })()', false);
+
+    startVideo($page)
+        ->assertScript('(() => { const e = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })()', true);
+});
+
 it('records the screen, shows the recording and sends it with the feedback', function (): void {
     $page = videoFeedbackPage();
 
-    $page->click('button:has-text("Neem je scherm op")')
+    startVideo($page)
         ->assertScript('window.mediaCalls.display', 1)
         ->assertScript('window.mediaCalls.mic', 1)
         ->assertVisible('[data-feedback-hub-recording]')
         ->assertScript('getComputedStyle(document.querySelector(".fh-backdrop")).display', 'none')
+        ->assertNotPresent('[data-feedback-hub-choice]:visible')
         ->assertNotPresent('button[aria-label="Feedback geven"]:visible');
 
     $page->script('new Promise(resolve => setTimeout(resolve, 1200))');
@@ -75,6 +132,9 @@ it('records the screen, shows the recording and sends it with the feedback', fun
         ->assertScript('!!document.querySelector(".fh-modal video")?.src?.startsWith("blob:")')
         ->assertScript('window.displayStream.getTracks().every(track => track.readyState === "ended")')
         ->assertNotPresent('[data-feedback-hub-recording]:visible');
+
+    $page->assertScript('window.chunkRequests', 0)
+        ->assertNotPresent('.fh-modal img[alt="Feedback screenshot"]:visible');
 
     $page->fill('#feedback-hub-title', 'Zo gaat het mis')
         ->click('button:has-text("Versturen")')
@@ -95,8 +155,7 @@ it('stops by itself when the browser stops sharing or the time is up', function 
     }
 
     $page = videoFeedbackPage();
-    $page->click('button:has-text("Neem je scherm op")')
-        ->assertVisible('[data-feedback-hub-recording]');
+    startVideo($page);
 
     if ($how === 'browser') {
         $page->script(<<<'JS'
@@ -116,7 +175,7 @@ it('stops by itself when the browser stops sharing or the time is up', function 
 it('returns to the form with a clear message when the person does not allow recording', function (): void {
     $page = videoFeedbackPage('denied');
 
-    $page->click('button:has-text("Neem je scherm op")')
+    $page->click('button:has-text("Video opnemen")')
         ->assertVisible('.fh-modal')
         ->assertSee('Opnemen is niet gelukt')
         ->assertNotPresent('.fh-modal video');
@@ -124,7 +183,7 @@ it('returns to the form with a clear message when the person does not allow reco
 
 it('lets the person remove the recording before sending', function (): void {
     $page = videoFeedbackPage();
-    $page->click('button:has-text("Neem je scherm op")');
+    startVideo($page);
     $page->script('new Promise(resolve => setTimeout(resolve, 600))');
     $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
         ->assertScript('!!document.querySelector(".fh-modal video")?.src')
@@ -137,16 +196,26 @@ it('lets the person remove the recording before sending', function (): void {
     expect(FeedbackReport::query()->sole()->video_path)->toBeNull();
 });
 
-it('hides the record button when the browser cannot record', function (): void {
+it('skips the choice when the browser cannot record', function (): void {
     videoFeedbackPage('none')
         ->assertVisible('.fh-modal')
-        ->assertDontSee('Neem je scherm op');
+        ->assertDontSee('Video opnemen');
 });
 
-it('hides the record button when video is switched off', function (): void {
+it('skips the choice when video is switched off', function (): void {
     config()->set('feedback-hub.video.enabled', false);
 
     videoFeedbackPage()
         ->assertVisible('.fh-modal')
-        ->assertDontSee('Neem je scherm op');
+        ->assertDontSee('Video opnemen');
+});
+
+it('offers to record again from the review', function (): void {
+    $page = videoFeedbackPage();
+    startVideo($page);
+    $page->script('new Promise(resolve => setTimeout(resolve, 600))');
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
+        ->click('button:has-text("Opnieuw opnemen")')
+        ->assertVisible('[data-feedback-hub-recording]')
+        ->assertScript('window.mediaCalls.display', 2);
 });

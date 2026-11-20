@@ -24,7 +24,7 @@
     <script>
         window.FeedbackHubWidget = (config) => {
         // Native media objects stay outside Alpine's reactive proxy: a proxied MediaRecorder or Blob breaks.
-        const media = { recorder: null, streams: [], chunks: [], timer: null, video: null, discard: false };
+        const media = { recorder: null, streams: [], chunks: [], timer: null, video: null, discard: false, leaveGuard: null };
         const video = config.video || {};
 
         return {
@@ -54,6 +54,7 @@
             videoChunkEndpoint: video.chunkEndpoint,
             videoChunkBytes: Number(video.chunkBytes) || 512 * 1024,
             videoMaxSeconds: Number(video.maxSeconds) || 120,
+            showChoice: false,
             recording: false,
             recordingSeconds: 0,
             videoUrl: null,
@@ -80,8 +81,20 @@
                 }
             },
 
+            // With video available the person first picks a screenshot or a video; otherwise straight to the screenshot.
             start() {
                 this.reset();
+
+                if (this.canRecordVideo()) {
+                    this.showChoice = true;
+                    return;
+                }
+
+                this.startScreenshot();
+            },
+
+            startScreenshot() {
+                this.showChoice = false;
 
                 if (window.FeedbackHubInspector) {
                     window.FeedbackHubInspector.activate();
@@ -134,6 +147,11 @@
 
             recordingUnavailableMessage: 'Opnemen is niet gelukt. Je kunt je feedback ook zonder video sturen.',
 
+            startVideo() {
+                this.showChoice = false;
+                this.startRecording();
+            },
+
             async startRecording() {
                 if (this.recording || !this.canRecordVideo()) return;
 
@@ -143,12 +161,14 @@
 
                 let display;
                 try {
+                    // Ask for this tab (Chrome and Edge show "Share this tab?"), never the whole screen where the browser lets us.
                     display = await navigator.mediaDevices.getDisplayMedia({
-                        video: { frameRate: 15 },
+                        video: { displaySurface: 'browser', frameRate: 15 },
                         audio: false,
                         preferCurrentTab: true,
                         selfBrowserSurface: 'include',
                         surfaceSwitching: 'exclude',
+                        monitorTypeSurfaces: 'exclude',
                     });
                 } catch (error) {
                     this.error = this.recordingUnavailableMessage;
@@ -191,6 +211,10 @@
                 // "Stop sharing" in the browser bar ends the video track; treat it as pressing Stop.
                 display.getVideoTracks().forEach((track) => track.addEventListener('ended', () => this.stopRecording(), { once: true }));
 
+                // The widget survives wire:navigate (x-persist); a real page load would end the recording, so warn first.
+                media.leaveGuard = (event) => { event.preventDefault(); event.returnValue = ''; };
+                window.addEventListener('beforeunload', media.leaveGuard);
+
                 this.recordingSeconds = 0;
                 this.recording = true;
                 recorder.start(1000);
@@ -209,6 +233,8 @@
             finishRecording(type) {
                 clearInterval(media.timer);
                 media.timer = null;
+                if (media.leaveGuard) window.removeEventListener('beforeunload', media.leaveGuard);
+                media.leaveGuard = null;
                 media.recorder = null;
                 this.stopStreams();
                 this.recording = false;
@@ -225,11 +251,23 @@
                 if (blob.size > 0) {
                     media.video = blob;
                     this.videoUrl = URL.createObjectURL(blob);
+                    this.collectPageContext();
                 } else {
                     this.error = this.recordingUnavailableMessage;
                 }
 
                 this.openModal();
+            },
+
+            // The page where the recording ends; the screenshot route gets this from the inspector's capture.
+            collectPageContext() {
+                const inspector = window.FeedbackHubInspector;
+                if (this.sessionData || !inspector) return;
+
+                this.sessionData = inspector.collectContext?.() || null;
+                this.consoleErrors = window.__feedbackHubConsoleErrors || [];
+                this.networkRequests = window.__feedbackHubNetworkRequests || [];
+                this.formState = inspector.collectFormState?.() || null;
             },
 
             stopStreams() {
@@ -286,6 +324,7 @@
                     this.stopRecording();
                 }
                 this.removeVideo();
+                this.showChoice = false;
                 this.error = '';
                 this.type = 'bug';
                 this.title = '';
