@@ -36,6 +36,13 @@ beforeEach(function (): void {
                         if ('{$mode}' === 'csrf' && window.followCalls === 1) return Promise.resolve(new Response('{}', {status:419}));
                         if ('{$mode}' === 'timeout') return new Promise(() => {});
                         if ('{$mode}' === 'error') return Promise.resolve(new Response('{}', {status: 503}));
+                        if (['accepted', 'accepted-summary', 'accepted-status', 'later-summary', 'later-error'].includes('{$mode}')) {
+                            return Promise.resolve(new Response(JSON.stringify({
+                                later: '{$mode}' !== 'accepted-status',
+                                summary: '{$mode}'.includes('summary') ? {title:'Later bekeken',saw:'Een datum',wants:'Ook de tijd',where:'Levering plannen'} : null,
+                                questions: [{id:'ignored',question:'Niet nu tonen',options:['A','B','C']}]
+                            }), {status: '{$mode}'.startsWith('accepted') ? 202 : ('{$mode}' === 'later-error' ? 503 : 200), headers:{'Content-Type':'application/json'}}));
+                        }
                         const response = new Response(JSON.stringify({
                             summary: {title: 'Tijd bij de levering', saw: 'Alleen een datum', wants: 'Ook de tijd', where: 'Levering plannen'},
                             questions: '{$mode}' === 'none' ? [] : [
@@ -215,6 +222,28 @@ it('announces a delayed successful submission after closing and still requests f
         ->assertNotPresent('.fh-modal:visible');
     expect(FeedbackReport::query()->count())->toBe(1);
 })->with(['escape', 'cross', 'backdrop']);
+
+it('treats accepted or explicitly deferred follow-up as a normal inbox completion', function (string $mode, bool $summary): void {
+    $page = followPage($mode);
+    $page->script("window.dangerToasts=0; window.addEventListener('feedback-hub:toast', e=>{if(e.detail.variant==='danger') window.dangerToasts++})");
+    $page->fill('#feedback-hub-description', 'Tijd ontbreekt')->click('button:has-text("Versturen")')
+        ->assertSee('Heeft Uteq nog een vraag? Die komt in je inbox.')
+        ->assertVisible('button:has-text("Klaar")')->assertNotPresent('.fh-answer:visible')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].followUpState", 'done')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].error", '')
+        ->assertScript('window.dangerToasts', 0);
+    if ($summary) {
+        $page->assertSee('Zo hebben we het begrepen')->assertSee('Later bekeken');
+    } else {
+        $page->assertNotPresent('.fh-summary:visible');
+    }
+})->with([
+    ['accepted', false],
+    ['accepted-summary', true],
+    ['accepted-status', false],
+    ['later-summary', true],
+    ['later-error', false],
+]);
 
 // Opt-in artifact pass: renders actual component states without adding screenshot
 // output or timing requirements to the normal suite.

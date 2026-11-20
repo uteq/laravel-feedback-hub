@@ -281,13 +281,19 @@ Respond with:
       "options": ["Everyone", "Only me", "My team"]
     }
   ],
-  "edit_url": "/my-feedback/report-uuid"
+  "edit_url": "/my-feedback/report-uuid",
+  "later": false
 }
 ```
 
 `summary` and `edit_url` may be null. Supply zero to two questions, each with
 three string options. Text is rendered as text, never HTML; edit links accept
-only HTTP(S). A timeout or failure finishes immediately with an inbox notice;
+only HTTP(S). The optional boolean `later` defaults to false. HTTP 202 or
+`later: true` means follow-up will come via the inbox: the widget finishes with
+the inbox notice, preserves any supplied summary and skips immediate questions.
+This is an accepted result, not an error. For example, return HTTP 202 with
+`{"later":true}`, optionally including `summary` and `edit_url`.
+A timeout or failure also finishes immediately with an inbox notice;
 the app must arrange any later inbox question. No polling occurs. Closing while
 waiting does not cancel the already saved report.
 

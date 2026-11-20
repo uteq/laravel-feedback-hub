@@ -785,14 +785,17 @@
                 try {
                     const data = await Promise.race([
                         this.postJson(this.followUpUrl, { report }).then(async response => {
-                            if (!response.ok) throw new Error('follow-up');
-                            return response.json();
+                            const data = await response.json();
+                            const later = response.status === 202 || data.later === true;
+                            if (!response.ok && !later) throw new Error('follow-up');
+                            return { ...data, later };
                         }),
                         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), this.followUpWaitMs); }),
                     ]);
                     if (this.sentReport !== report) return;
                     this.followUpSummary = data.summary || null;
-                    this.followUpQuestions = Array.isArray(data.questions) ? data.questions.slice(0, 2) : [];
+                    this.followUpLate = data.later === true;
+                    this.followUpQuestions = !this.followUpLate && Array.isArray(data.questions) ? data.questions.slice(0, 2) : [];
                     // Links are supplied by the host, but must never execute script.
                     try {
                         const url = new URL(data.edit_url, location.href);
