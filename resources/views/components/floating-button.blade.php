@@ -117,22 +117,22 @@
                 </header>
 
                 <div class="fh-body">
-                    <template x-if="videoUrl">
-                        <div class="fh-field">
-                            <label class="fh-label">Video</label>
-                            <video class="fh-video" :src="videoUrl" controls playsinline></video>
-                            <div class="fh-video-actions">
-                                <button type="button" class="fh-type" x-on:click="startRecording">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v4.5h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                    Opnieuw opnemen
-                                </button>
-                                <button type="button" class="fh-type" x-on:click="removeVideo">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                    Video verwijderen
-                                </button>
-                            </div>
+                    {{-- x-show, not x-if: WebKit (Safari, the macOS app) never gives a <video> cloned from a
+                         <template> a video layer, so the preview stayed black with only sound playing. --}}
+                    <div class="fh-field" x-cloak x-show="videoUrl">
+                        <label class="fh-label">Video</label>
+                        <video class="fh-video" x-ref="video" :src="videoUrl" controls playsinline data-feedback-hub-video></video>
+                        <div class="fh-video-actions">
+                            <button type="button" class="fh-type" x-on:click="startRecording">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 4v4.5h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                Opnieuw opnemen
+                            </button>
+                            <button type="button" class="fh-type" x-on:click="removeVideo">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                Video verwijderen
+                            </button>
                         </div>
-                    </template>
+                    </div>
 
                     <div class="fh-field" x-show="screenshot">
                         <label class="fh-label">Screenshot</label>

@@ -349,6 +349,8 @@
             },
 
             removeVideo() {
+                // The preview element stays in the page (x-show), so stop it before its source goes.
+                this.$refs.video?.pause();
                 if (this.videoUrl) URL.revokeObjectURL(this.videoUrl);
                 this.videoUrl = null;
                 media.video = null;

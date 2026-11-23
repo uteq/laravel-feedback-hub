@@ -206,7 +206,21 @@ it('returns to the form with a clear message when the person does not allow reco
     $page->click('button:has-text("Video opnemen")')
         ->assertVisible('.fh-modal')
         ->assertSee('Opnemen is niet gelukt')
-        ->assertNotPresent('.fh-modal video');
+        ->assertNotPresent('.fh-modal video:visible');
+});
+
+// WebKit (Safari, the macOS app) never gives a <video> cloned from a <template> (x-if) a video
+// layer: the preview stayed black and only the sound played. The page's own element must show it.
+it('shows the recording in the video element that came with the page', function (): void {
+    $page = videoFeedbackPage();
+    $page->script('document.querySelector("[data-feedback-hub-video]").dataset.fromPage = "yes"');
+    startVideo($page);
+    $page->script('new Promise(resolve => setTimeout(resolve, 600))');
+    $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
+        ->assertVisible('.fh-modal video')
+        ->assertScript('document.querySelectorAll(".fh-modal video").length', 1)
+        ->assertScript('document.querySelector(".fh-modal video").dataset.fromPage', 'yes')
+        ->assertScript('document.querySelector(".fh-modal video").src.startsWith("blob:")');
 });
 
 it('lets the person remove the recording before sending', function (): void {
@@ -216,7 +230,9 @@ it('lets the person remove the recording before sending', function (): void {
     $page->click('[data-feedback-hub-recording] button:has-text("Stop")')
         ->assertScript('!!document.querySelector(".fh-modal video")?.src')
         ->click('button:has-text("Video verwijderen")')
-        ->assertNotPresent('.fh-modal video')
+        ->assertNotPresent('.fh-modal video:visible')
+        ->assertScript('document.querySelector(".fh-modal video").paused')
+        ->assertScript('document.querySelector(".fh-modal video").hasAttribute("src")', false)
         ->fill('#feedback-hub-title', 'Toch zonder video')
         ->click('button:has-text("Versturen")')
         ->assertScript('document.querySelector(".fh-backdrop").style.display === "none"');
