@@ -359,3 +359,66 @@ element label and viewport stay with it across navigation; updates apply to new
 feedback. Choosing a new screenshot or recording starts a new draft. Closing
 during submission/upload does not cancel delivery: success is announced by toast
 and follow-up runs without reopening the window.
+
+### Host conversation handoff and button status
+
+Hosts can take over immediately after storage, without the package's follow-up
+request or sent panel. Every successful submission dispatches the cancelable
+window event `feedback-hub:submitted` with `{ reportId }` (the saved report UUID).
+Call `event.preventDefault()` synchronously to close and reset the widget and
+handle the conversation yourself. Without cancellation the existing flow stays
+unchanged, including follow-up when configured. The stored payload stays unchanged.
+
+```blade
+<x-feedback-hub::floating-button
+    follow-up-url="/feedback/follow-up"
+    submit-label="Discuss with AI"
+    :notice="['title' => 'Your team receives this.', 'text' => 'AI helps clarify your feedback first.']"
+    :status="$feedbackStatus"
+/>
+```
+
+`submitLabel` defaults to null (the existing send label/icon); a supplied label
+adds a sparkle icon. `notice` defaults to null and accepts `title` (bold opening)
+and `text` (remaining sentence), both plain strings. No HTML is accepted.
+Both props refresh from page-local JSON on `livewire:navigated`, alongside
+`status`, `contextLabel`, `myFeedbackUrl` and `myFeedbackBadge`.
+
+`status` defaults to null and has this shape:
+
+```js
+const status = {
+    state: 'busy', // 'busy', 'attention', or null
+    label: 'AI is reviewing your feedback', // optional clickable pill
+    items: [{ id: 'report-uuid', title: 'Delivery time', line: 'Reviewing', state: 'busy' }]
+};
+window.dispatchEvent(new CustomEvent('feedback-hub:update', { detail: { status } }));
+window.addEventListener('feedback-hub:submitted', event => {
+    event.preventDefault();
+    openConversation(event.detail.reportId);
+});
+window.addEventListener('feedback-hub:open', event => openConversation(event.detail.id));
+```
+
+Busy adds a rotating ring and a spinner; attention adds an orange pill/sparkle
+and orange item markers. The button count continues to use `myFeedbackBadge`.
+Items appear above My feedback in the choice menu. Clicking an item emits
+`feedback-hub:open { id }`; the pill uses the first item matching the overall
+state, falling back to the first item. Supply an item when supplying a label.
+These clicks only emit the event; the host owns opening/closing its conversation.
+The optional label also accepts `{ strong: '1 question', text: 'about your feedback' }`.
+`strong` is bold, and orange in the attention state; string labels keep working.
+Host text is rendered through `x-text`, never as HTML.
+
+While the host window is open, hide the floating controls and dismiss the menu:
+
+```js
+window.dispatchEvent(new CustomEvent('feedback-hub:update', { detail: { hidden: true } }));
+// On close/minimize:
+window.dispatchEvent(new CustomEvent('feedback-hub:update', { detail: { hidden: false } }));
+```
+
+`hidden` defaults to false and persists across navigation until the host updates
+it. It hides the round button, pill and choice menu, without interrupting a
+recording or submission. Updates may contain any subset of props; `status: null`
+clears the host status. None of these extensions require AI or add package routes.

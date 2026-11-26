@@ -36,6 +36,10 @@
             contextLabel: config.contextLabel || '',
             myFeedbackUrl: config.myFeedbackUrl || null,
             myFeedbackBadge: Number(config.myFeedbackBadge) || 0,
+            submitLabel: config.submitLabel || '',
+            notice: config.notice || null,
+            status: config.status || null,
+            hidden: false,
             pageContext: null,
             closedWhileSubmitting: false,
             sentVideo: false,
@@ -44,6 +48,7 @@
                     const node = document.querySelector('script[data-feedback-hub-props]');
                     try { if (node) this.updateProps(JSON.parse(node.textContent)); } catch (_) {}
                 };
+                this.onNavigate();
                 this.onUpdate = event => this.updateProps(event.detail || {});
                 document.addEventListener('livewire:navigated', this.onNavigate);
                 window.addEventListener('feedback-hub:update', this.onUpdate);
@@ -55,9 +60,20 @@
                 media.shotObserver?.disconnect();
             },
             updateProps(props) {
+                if (Object.hasOwn(props, 'submitLabel')) this.submitLabel = String(props.submitLabel || '');
+                if (Object.hasOwn(props, 'notice')) this.notice = props.notice || null;
+                if (Object.hasOwn(props, 'status')) this.status = props.status || null;
+                if (Object.hasOwn(props, 'hidden')) {
+                    this.hidden = Boolean(props.hidden);
+                    if (this.hidden) this.showChoice = false;
+                }
                 if (Object.hasOwn(props, 'contextLabel')) this.contextLabel = String(props.contextLabel || '');
                 if (Object.hasOwn(props, 'myFeedbackBadge')) this.myFeedbackBadge = Math.max(0, Number(props.myFeedbackBadge) || 0);
                 if (Object.hasOwn(props, 'myFeedbackUrl')) this.myFeedbackUrl = props.myFeedbackUrl || null;
+            },
+            openStatus(id = null) {
+                id ??= this.status?.items?.find(item => item.state === this.status.state)?.id ?? this.status?.items?.[0]?.id;
+                if (id != null) window.dispatchEvent(new CustomEvent('feedback-hub:open', { detail: { id } }));
             },
             sentReport: null,
             followUpState: null,
@@ -130,13 +146,15 @@
             // With video available the person first picks a screenshot or a video; otherwise straight to the screenshot.
             start() {
                 if (this.submitting) { this.openModal(); return; }
+                this.undoDraft = null;
+                media.draft = null;
                 if (this.followUpUrl && !this.sentReport && this.hasDraft()) {
                     this.showChoice = true;
                     return;
                 }
                 this.reset();
 
-                if (this.canRecordVideo() || this.myFeedbackUrl) {
+                if (this.status?.items?.length || this.canRecordVideo() || this.myFeedbackUrl) {
                     this.showChoice = true;
                     return;
                 }
@@ -147,7 +165,7 @@
             },
             resumeDraft() { this.openModal(); },
             startScreenshot() {
-                if (this.followUpUrl && this.hasDraft()) this.reset();
+                this.reset();
                 this.repoint();
             },
             repoint() {
@@ -287,7 +305,7 @@
             recordingUnavailableMessage: 'Opnemen is niet gelukt. Je kunt je feedback ook zonder video sturen.',
 
             startVideo() {
-                if (this.followUpUrl && this.hasDraft()) this.reset();
+                this.reset();
                 this.pageContext = null;
                 this.showChoice = false;
                 this.startRecording();
@@ -762,6 +780,15 @@
                     }
                     if (!response.ok) {
                         throw new Error(data.message || 'Feedback kon niet worden verstuurd');
+                    }
+
+                    // A host may take over the saved report before any follow-up request or panel.
+                    if (!window.dispatchEvent(new CustomEvent('feedback-hub:submitted', {
+                        detail: { reportId: data.id }, cancelable: true,
+                    }))) {
+                        this.closeModal();
+                        this.reset();
+                        return;
                     }
 
                     if (this.followUpUrl) {

@@ -16,6 +16,9 @@ beforeEach(function (): void {
         $context = $mode === 'second' ? 'D-005 · Ophalen plannen' : 'D-004 · Levering plannen';
         $badge = $mode === 'second' ? 5 : 2;
         $mine = $mode === 'second' ? '/mijn-feedback-nieuw' : '/mijn-feedback';
+        $hostProps = $mode === 'host-props' ? <<<'BLADE'
+            submit-label="Discuss with AI" :notice="['title'=>'Our team receives this.', 'text'=>'AI reviews it first.']" :status="['state'=>'busy','label'=>'Reviewing','items'=>[['id'=>'one','title'=>'Delivery','line'=>'Reviewing','state'=>'busy']]]"
+            BLADE : '';
         $html = BrowserTestLayout::render(<<<HTML
             <script>
                 window.answers = []; window.followCalls = 0; window.followBodies = []; window.followHeaders = []; window.csrfRefreshes = 0;
@@ -59,7 +62,7 @@ beforeEach(function (): void {
             <style>body {font-family: ui-sans-serif, system-ui, sans-serif;}</style><h1>Levering plannen</h1>
             <a href="/_follow/second" wire:navigate>Andere pagina</a>
             <label for="delivery-date">Leverdatum</label><input id="delivery-date" value="private-field-value">
-            <x-feedback-hub::floating-button follow-up-url="/_follow-up" :follow-up-wait-ms="200" context-label="{$context}" my-feedback-url="{$mine}" :my-feedback-badge="{$badge}" />
+            <x-feedback-hub::floating-button follow-up-url="/_follow-up" :follow-up-wait-ms="200" context-label="{$context}" {$hostProps} my-feedback-url="{$mine}" :my-feedback-badge="{$badge}" />
             HTML);
 
         return str_replace('<title>Feedback test</title>', '<title>Pagina '.$mode.'</title>', $html);
@@ -339,4 +342,110 @@ it('lets the user re-point and remove a screenshot while retaining the text', fu
         ->click('button[aria-label="Schermafbeelding verwijderen"]')
         ->assertNotPresent('.fh-shot-frame:visible')
         ->assertValue('#feedback-hub-description', 'Dit moet anders');
+});
+
+it('hands over a saved report immediately with its UUID and unchanged session payload', function (): void {
+    $page = followPage();
+    $page->script(<<<'JS'
+        window.submitted = [];
+        window.addEventListener('feedback-hub:submitted', e => { e.preventDefault(); window.submitted.push(e.detail); });
+        const w = document.querySelector('.fh-widget')._x_dataStack[0];
+        w.contextLabel = 'Delivery planning'; w.capturePageContext();
+        w.sessionData = { title: 'Original title', viewport: {width: 800, height: 600}, marker: 'unchanged' };
+    JS);
+    $page->fill('#feedback-hub-description', 'Tijd ontbreekt')->click('button:has-text("Versturen")')
+        ->assertNotPresent('.fh-modal:visible')->assertScript('window.followCalls', 0)
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].followUpState", null);
+    $report = FeedbackReport::query()->sole();
+    $page->assertScript('window.submitted', [['reportId' => $report->uuid]]);
+    expect($report->session_data)->toBe(['title' => 'Original title', 'viewport' => ['width' => 800, 'height' => 600], 'marker' => 'unchanged']);
+    $page->click('button[aria-label="Feedback geven"]')->click('button:has-text("Schermafbeelding")')
+        ->assertValue('#feedback-hub-description', '')->assertSee('Versturen');
+});
+
+it('renders host status safely and dispatches open without opening the widget', function (): void {
+    $page = followPage();
+    $page->script(<<<'JS'
+        document.querySelector('.fh-widget')._x_dataStack[0].close();
+        window.opened=[]; window.addEventListener('feedback-hub:open', e=>window.opened.push(e.detail));
+        window.dispatchEvent(new CustomEvent('feedback-hub:update', {detail:{status:{state:'busy',label:'AI kijkt mee',items:[{id:'report-1',title:'<img src=x onerror=alert(1)>',line:'Bezig',state:'busy'}]}}}));
+    JS);
+    $page->assertVisible('.fh-button.busy')->assertVisible('.fh-pill .fh-spinner')
+        ->click('.fh-pill')->assertScript('window.opened', [['id' => 'report-1']])
+        ->assertNotPresent('.fh-modal:visible')->click('.fh-button')->assertVisible('.fh-pend .fh-spinner')
+        ->assertSee('<img src=x onerror=alert(1)>')->assertNotPresent('.fh-pend img')
+        ->click('.fh-pend')->assertScript('window.opened.length', 2);
+    $page->script(<<<'JS'
+        window.dispatchEvent(new CustomEvent('feedback-hub:update', {detail:{myFeedbackBadge:3,status:{state:'attention',label:'1 vraag over je feedback',items:[{id:'report-1',title:'Tijd bij levering',line:'1 vraag voor jou',state:'attention'}]}}}));
+    JS);
+    $page->assertNotPresent('.fh-button.busy')->assertVisible('.fh-pend.att')
+        ->assertScript("document.querySelector('.fh-button .fh-badge').textContent", '3');
+    $page->script("document.querySelector('.fh-widget')._x_dataStack[0].showChoice=false");
+    $page->assertVisible('.fh-pill.att');
+    $page->script("window.dispatchEvent(new CustomEvent('feedback-hub:update', {detail:{hidden:true}}))");
+    $page->assertNotPresent('.fh-button:visible')->assertNotPresent('.fh-pill:visible')->assertNotPresent('.fh-choice:visible');
+    $page->script("window.dispatchEvent(new CustomEvent('feedback-hub:update', {detail:{hidden:false,status:null}}))");
+    $page->assertVisible('.fh-button')->assertNotPresent('.fh-pill:visible');
+});
+
+it('refreshes host text and status on navigation and renders text rather than markup', function (): void {
+    $page = followPage();
+    $page->script(<<<'JS'
+        document.querySelector('script[data-feedback-hub-props]').textContent=JSON.stringify({submitLabel:'<b>Discuss</b>',notice:{title:'<img src=x>',text:'<script>bad()</script>'},status:{state:'busy',label:'Thinking',items:[{id:'one',title:'One',line:'Thinking',state:'busy'}]}});
+        document.dispatchEvent(new Event('livewire:navigated'));
+    JS);
+    $page->assertSee('<b>Discuss</b>')->assertSee('<img src=x>')->assertSee('<script>bad()</script>')
+        ->assertNotPresent('.fh-uteq img')->assertNotPresent('.fh-uteq script')->assertNotPresent('.fh-primary b');
+    $page->script("document.querySelector('.fh-widget')._x_dataStack[0].close()");
+    $page->assertVisible('.fh-button.busy')->assertSee('Thinking');
+});
+
+it('renders the host initial props before any update or navigation event', function (): void {
+    $page = visit('/_follow/host-props');
+    $page->assertVisible('.fh-button.busy')->assertSee('Reviewing')->assertVisible('.fh-pill .fh-spinner');
+    $page->click('.fh-button')->click('button:has-text("Schermafbeelding")')
+        ->assertSee('Discuss with AI')->assertSee('Our team receives this.')->assertSee('AI reviews it first.');
+});
+
+it('prepares new screenshot and video choices with status present and clears undo', function (string $choice): void {
+    $page = followPage();
+    $page->fill('#feedback-hub-description', 'Discarded draft')->click('button[aria-label="Weggooien"]')->assertSee('Ongedaan maken');
+    $page->script(<<<'JS'
+        const w=document.querySelector('.fh-widget')._x_dataStack[0];
+        w.followUpUrl=null; w.chatEnabled=true;
+        w.status={state:'busy',items:[{id:'one',title:'One',line:'Reviewing',state:'busy'}]};
+        w.canRecordVideo=()=>true;
+        w.startRecording=() => { window.recordingPrepared={messages:w.chatMessages,undo:w.undoDraft}; w.openModal(); };
+        true;
+    JS);
+    $page->click('.fh-button')->assertNotPresent('.fh-draft-toast:visible')->click('button:has-text("'.$choice.'")')
+        ->assertSee('Waar liep je tegenaan?')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].description", '')
+        ->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].undoDraft", null);
+    $page->script("document.querySelector('.fh-widget')._x_dataStack[0].restoreDraft()");
+    $page->assertScript("document.querySelector('.fh-widget')._x_dataStack[0].description", '');
+})->with(['Schermafbeelding', 'Video opnemen']);
+
+it('keeps five status rows scrollable in a short phone menu', function (): void {
+    $page = followPage();
+    $page->resize(390, 320);
+    $page->script(<<<'JS'
+        const w=document.querySelector('.fh-widget')._x_dataStack[0];w.close();
+        w.status={state:'busy',items:Array.from({length:5},(_,i)=>({id:i,title:'Report '+i,line:'Reviewing',state:'busy'}))};
+    JS);
+    $page->click('.fh-button')->assertVisible('.fh-choice');
+    $page->assertScript(<<<'JS'
+        (()=>{const m=document.querySelector('.fh-choice'),r=m.getBoundingClientRect();return r.top>=0 && r.bottom<=innerHeight && m.scrollHeight>m.clientHeight && getComputedStyle(m).overflowY==='auto';})()
+        JS, true);
+    $page->click('a:has-text("Mijn feedback")')->assertScript('location.pathname', '/mijn-feedback');
+});
+
+it('renders structured pill emphasis as escaped text', function (): void {
+    $page = followPage();
+    $page->script(<<<'JS'
+        const w=document.querySelector('.fh-widget')._x_dataStack[0];w.close();
+        w.updateProps({status:{state:'attention',label:{strong:'<b>1 vraag</b>',text:'<img src=x>'},items:[{id:'one',title:'One',state:'attention'}]}});
+    JS);
+    $page->assertSee('<b>1 vraag</b>')->assertSee('<img src=x>')->assertNotPresent('.fh-pill b')->assertNotPresent('.fh-pill img')
+        ->assertScript("getComputedStyle(document.querySelector('.fh-pill strong')).color", 'rgb(194, 65, 12)');
 });

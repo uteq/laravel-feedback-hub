@@ -1,4 +1,4 @@
-@props(['floating' => true, 'followUpUrl' => null, 'followUpWaitMs' => 3000, 'contextLabel' => null, 'myFeedbackUrl' => null, 'myFeedbackBadge' => 0])
+@props(['floating' => true, 'followUpUrl' => null, 'followUpWaitMs' => 3000, 'contextLabel' => null, 'myFeedbackUrl' => null, 'myFeedbackBadge' => 0, 'submitLabel' => null, 'notice' => null, 'status' => null])
 
 @php($chatEnabled = \Uteq\FeedbackHub\Support\FeedbackAiAvailability::available())
 @php($video = [
@@ -43,7 +43,7 @@
             .fh-record-dot { width: 10px; height: 10px; border-radius: 999px; background: #dc2626; }
             .fh-video { display: block; max-height: 260px; width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; background: #0f172a; }
             .fh-video-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-            .fh-choice { position: fixed; right: 24px; bottom: 92px; z-index: 55; display: flex; flex-direction: column; gap: 4px; width: 260px; border: 1px solid rgba(15, 23, 42, .12); border-radius: 12px; background: white; padding: 6px; box-shadow: 0 20px 48px rgba(15, 23, 42, .2); }
+            .fh-choice { position: fixed; right: 24px; bottom: 92px; max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px); overflow-y: auto; z-index: 55; display: flex; flex-direction: column; gap: 4px; width: 260px; border: 1px solid rgba(15, 23, 42, .12); border-radius: 12px; background: white; padding: 6px; box-shadow: 0 20px 48px rgba(15, 23, 42, .2); }
             .fh-choice-option { display: flex; align-items: flex-start; gap: 12px; border: 0; border-radius: 8px; background: transparent; padding: 10px 12px; color: #172026; text-align: left; font: inherit; cursor: pointer; }
             .fh-choice-option:hover, .fh-choice-option:focus-visible { background: #edf7f8; outline: none; }
             .fh-choice-option svg { flex: none; margin-top: 2px; color: #135d66; }
@@ -84,10 +84,27 @@
             .fh-summary dt { color: #64748b; } .fh-summary dd { margin: 0; white-space: pre-wrap; }
             .fh-badge { border-radius: 999px; background: #dc2626; color: white; padding: 2px 6px; font-size: 12px; }
             .fh-button .fh-badge { position: absolute; right: -2px; top: -2px; }
+            .fh-button.busy::before { content:""; position:absolute; inset:-5px; border-radius:999px; border:3px solid rgba(19,93,102,.18); border-top-color:#135d66; animation:fh-spin 1s linear infinite; }
+            .fh-pill { position:fixed; right:92px; bottom:34px; z-index:50; display:inline-flex; gap:8px; align-items:center; max-width:calc(100vw - 110px); box-sizing:border-box; background:#fff; border:1px solid #e7eaee; border-radius:999px; padding:7px 14px 7px 11px; min-height:36px; line-height:20px; font:inherit; font-size:13.5px; box-shadow:0 10px 26px rgba(15,23,42,.14); color:#172026; cursor:pointer; text-align:left; }
+            .fh-pill:hover { background:#f8fafa; }
+            .fh-pill.att { border-color:#fdba74; background:#fff7ed; color:#7c2d12; }
+            .fh-pill.att strong { color:#c2410c; font-weight:650; }
+            .fh-pill .fh-spinner, .fh-pend .fh-spinner { width:12px; height:12px; box-sizing:border-box; border:2px solid #d6dfe0; border-top-color:#135d66; }
+            .fh-pend { display:flex; align-items:center; gap:10px; width:100%; border:0; background:#f7fafa; border-radius:8px; padding:9px 12px; min-height:56px; box-sizing:border-box; line-height:18px; text-align:left; font:inherit; font-size:13px; cursor:pointer; }
+            .fh-pend:hover { background:#edf7f8; }
+            .fh-pend .tt { display:block; font-weight:650; color:#172026; overflow-wrap:anywhere; }
+            .fh-pend .sub { display:block; margin-top:2px; color:#64748b; overflow-wrap:anywhere; }
+            .fh-pend.att .sub { color:#c2410c; font-weight:600; }
+            .fh-pend .pch { margin-left:auto; color:#64748b; flex:none; }
+            .fh-uteq { display:flex; gap:10px; align-items:flex-start; margin:0 18px 14px; background:#edf7f8; border-radius:8px; padding:10px 12px; font-size:13.5px; line-height:1.45; color:#1f3a3e; }
+            .fh-uteq svg { color:#135d66; flex:none; margin-top:1px; }
+            .fh-body.fh-body-with-notice { padding-bottom:4px; }
+            .fh-uteq strong { font-weight:650; }
             @media (max-width: 480px) {
                 .fh-backdrop { padding: 12px; }
                 .fh-modal { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
                 .fh-header, .fh-footer, .fh-body { padding: 14px; }
+                .fh-uteq { margin-left:14px; margin-right:14px; }
             }
         </style>
 
@@ -102,7 +119,7 @@
 
     {{-- Livewire keeps this wrapper (and the recording in it) across wire:navigate. x-persist sits on a plain
          wrapper: on the x-data element itself Livewire would initialise the component a second time. --}}
-    <script type="application/json" data-feedback-hub-props>{!! json_encode(['contextLabel' => $contextLabel, 'myFeedbackBadge' => (int) $myFeedbackBadge, 'myFeedbackUrl' => $myFeedbackUrl], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}</script>
+    <script type="application/json" data-feedback-hub-props>{!! json_encode(['contextLabel' => $contextLabel, 'myFeedbackBadge' => (int) $myFeedbackBadge, 'myFeedbackUrl' => $myFeedbackUrl, 'submitLabel' => $submitLabel, 'notice' => $notice, 'status' => $status], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}</script>
     <div x-persist="feedback-hub">
     <div
         x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')), followUpUrl: @js($followUpUrl), followUpWaitMs: @js($followUpWaitMs), contextLabel: @js($contextLabel), myFeedbackUrl: @js($myFeedbackUrl), myFeedbackBadge: @js((int) $myFeedbackBadge), chatEndpoint: @js(route('feedback-hub.chat'), JSON_UNESCAPED_SLASHES), csrfEndpoint: @js(route('feedback-hub.csrf'), JSON_UNESCAPED_SLASHES), chatEnabled: {{ $chatEnabled ? 'true' : 'false' }}, video: @js($video, JSON_UNESCAPED_SLASHES) })"
@@ -114,7 +131,7 @@
         data-feedback-hub-widget
     >
         <div x-on:click.outside="showChoice = false" x-on:keydown.escape.window="showChoice = false">
-        <div class="fh-choice" x-cloak x-show="showChoice" x-transition.opacity role="menu" aria-label="Feedback geven" data-feedback-hub-choice>
+        <div class="fh-choice" x-cloak x-show="showChoice && !hidden" x-transition.opacity role="menu" aria-label="Feedback geven" data-feedback-hub-choice>
             <button type="button" class="fh-choice-option" role="menuitem" x-on:click="startScreenshot">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/></svg>
                 <span><span class="fh-choice-title">Schermafbeelding</span><span class="fh-choice-text">Wijs aan waar het om gaat</span></span>
@@ -127,6 +144,14 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 3h14v18H5zM8 8h8M8 12h8" stroke="currentColor" stroke-width="1.8"/></svg>
                 <span class="fh-choice-title">Verder met je tekst</span>
             </button>
+            <template x-for="item in (status?.items || [])" :key="item.id">
+                <button type="button" class="fh-pend" :class="{ att: item.state === 'attention' }" role="menuitem" x-on:click="openStatus(item.id)">
+                    <span class="fh-spinner" x-show="item.state === 'busy'" aria-hidden="true"></span>
+                    <svg x-show="item.state === 'attention'" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:#c2410c;flex:none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v6m0 3v1" stroke="currentColor" stroke-width="1.8"/></svg>
+                    <span><span class="tt" x-text="item.title"></span><span class="sub" x-text="item.line"></span></span>
+                    <svg class="pch" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.8"/></svg>
+                </button>
+            </template>
             <a :href="myFeedbackUrl" x-show="myFeedbackUrl" class="fh-choice-option" role="menuitem" style="text-decoration: none; border-top: 1px solid #e7eaee">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h16v13H8l-4 4V4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
                 <span class="fh-choice-title">Mijn feedback</span>
@@ -135,7 +160,12 @@
         </div>
 
         @if ($floating)
-            <button type="button" class="fh-button" x-on:click="start" x-show="!showModal && !recording" aria-label="Feedback geven">
+            <button type="button" class="fh-pill" :class="{ att: status?.state === 'attention' }" x-cloak x-show="!hidden && !showModal && !recording && !showChoice && status?.label" x-on:click="openStatus()">
+                <span class="fh-spinner" x-show="status?.state === 'busy'" aria-hidden="true"></span>
+                <svg x-show="status?.state === 'attention'" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z" stroke="currentColor" stroke-width="1.8"/></svg>
+                <span><strong x-show="status?.label?.strong" x-text="status?.label?.strong"></strong><span x-show="status?.label?.strong && status?.label?.text"> </span><span x-text="typeof status?.label === 'string' ? status.label : status?.label?.text"></span></span>
+            </button>
+            <button type="button" class="fh-button" :class="{ busy: status?.state === 'busy' }" x-on:click="start" x-show="!hidden && !showModal && !recording" aria-label="Feedback geven">
                 <span class="fh-badge" x-show="myFeedbackBadge > 0" x-text="myFeedbackBadge"></span>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M4 13.5V10a3 3 0 0 1 3-3h3l6-3v16l-6-3H7a3 3 0 0 1-3-3.5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
@@ -163,7 +193,7 @@
                     <button type="button" class="fh-icon" x-on:click="close" aria-label="Sluiten">×</button>
                 </header>
 
-                <div class="fh-body" x-show="!sentReport">
+                <div class="fh-body" :class="{ 'fh-body-with-notice': notice?.title || notice?.text }" x-show="!sentReport">
                     @if($followUpUrl)
                         <div class="fh-alert" x-cloak x-show="error" role="alert">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 10 18H2L12 3ZM12 9v5M12 17v1" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
@@ -270,6 +300,10 @@
                     @unless($followUpUrl)<p class="fh-error" x-cloak x-show="error" x-text="error" role="alert"></p>@endunless
                 </div>
 
+                <div class="fh-uteq" x-cloak x-show="!sentReport && (notice?.title || notice?.text)">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M15 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.8"/></svg>
+                    <div><strong x-text="notice?.title"></strong> <span x-text="notice?.text"></span></div>
+                </div>
                 <footer class="fh-footer" x-show="!sentReport">
                     @if($followUpUrl)
                         <button type="button" class="fh-icon" x-show="!sentReport" x-on:click="discardDraft" :disabled="submitting" aria-label="Weggooien" style="margin-right:auto">
@@ -277,12 +311,13 @@
                         </button>
                     @endif
                     @unless($followUpUrl)<button type="button" class="fh-secondary" x-on:click="close">Annuleren</button>@endunless
-                    <button type="button" class="fh-primary" :class="{ 'fh-with-icon': followUpUrl }" x-show="mode !== 'chat'" x-on:click="submit" :disabled="submitting || (followUpUrl ? (!description.trim() && !videoUrl) : !title)">
+                    <button type="button" class="fh-primary" :class="{ 'fh-with-icon': followUpUrl || submitLabel }" x-show="mode !== 'chat'" x-on:click="submit" :disabled="submitting || (followUpUrl ? (!description.trim() && !videoUrl) : !title)">
+                        <svg x-show="submitLabel && !submitting" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z" stroke="currentColor" stroke-width="1.8"/></svg>
                         @if($followUpUrl)
-                            <svg x-show="!submitting" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4L22 2ZM11 13 22 2" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                            <svg x-show="!submitLabel && !submitting" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4L22 2ZM11 13 22 2" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
                             <span class="fh-spinner" x-show="submitting" aria-hidden="true"></span>
                         @endif
-                        <span x-show="!submitting" x-text="followUpUrl && error ? 'Opnieuw versturen' : 'Versturen'"></span>
+                        <span x-show="!submitting" x-text="followUpUrl && error ? 'Opnieuw versturen' : (submitLabel || 'Versturen')"></span>
                         <span x-show="submitting" data-feedback-hub-submit-label x-text="followUpUrl ? 'Versturen…' : (uploadProgress === null ? 'Bezig...' : `Video versturen ${uploadProgress}%`)"></span>
                     </button>
                 </footer>
