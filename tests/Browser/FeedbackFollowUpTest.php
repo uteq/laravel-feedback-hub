@@ -19,6 +19,9 @@ beforeEach(function (): void {
         $hostProps = $mode === 'host-props' ? <<<'BLADE'
             submit-label="Discuss with AI" :notice="['title'=>'Our team receives this.', 'text'=>'AI reviews it first.']" :status="['state'=>'busy','label'=>'Reviewing','items'=>[['id'=>'one','title'=>'Delivery','line'=>'Reviewing','state'=>'busy']]]"
             BLADE : '';
+        if ($mode === 'mobile-host') {
+            $hostProps = 'mobile-trigger="host" mobile-anchor="h1"';
+        }
         $html = BrowserTestLayout::render(<<<HTML
             <script>
                 window.answers = []; window.followCalls = 0; window.followBodies = []; window.followHeaders = []; window.csrfRefreshes = 0;
@@ -463,4 +466,21 @@ it('truncates long status rows and pills without horizontal overflow', function 
             ->assertScript("document.querySelector('.fh-pend .pch').getBoundingClientRect().right <= document.querySelector('.fh-choice').getBoundingClientRect().right", true);
         $page->script("document.querySelector('.fh-widget')._x_dataStack[0].showChoice=false");
     }
+});
+
+it('lets a host open its phone menu below its anchor while keeping the desktop trigger', function (): void {
+    $page = visit('/_follow/mobile-host');
+    $page->resize(390, 844);
+    $page->assertNotPresent('.fh-button:visible')->assertNotPresent('.fh-pill:visible');
+    $page->script("window.dispatchEvent(new CustomEvent('open-feedback-hub'))");
+    $page->assertVisible('.fh-choice')->assertSee('Schermafbeelding')
+        ->assertScript("Math.abs(document.querySelector('.fh-choice').getBoundingClientRect().top - document.querySelector('h1').getBoundingClientRect().bottom - 8) < 1");
+    $page->resize(1440, 900);
+    $page->assertVisible('.fh-button')->assertScript("getComputedStyle(document.querySelector('.fh-choice')).bottom", '92px');
+});
+
+it('retains the floating phone trigger when the host option is absent', function (): void {
+    $page = visit('/_follow/host-props');
+    $page->resize(390, 844);
+    $page->assertVisible('.fh-button')->assertVisible('.fh-pill');
 });

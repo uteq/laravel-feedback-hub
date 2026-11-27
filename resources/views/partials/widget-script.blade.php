@@ -144,7 +144,12 @@
             },
 
             // With video available the person first picks a screenshot or a video; otherwise straight to the screenshot.
+            positionMobileMenu() {
+                const anchor = config.mobileAnchor ? document.querySelector(config.mobileAnchor) : null;
+                if (anchor) this.$el.style.setProperty('--fh-mobile-menu-top', `${Math.max(0, anchor.getBoundingClientRect().bottom) + 8}px`);
+            },
             start() {
+                this.positionMobileMenu();
                 if (this.submitting) { this.openModal(); return; }
                 this.undoDraft = null;
                 media.draft = null;

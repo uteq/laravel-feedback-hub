@@ -422,3 +422,16 @@ window.dispatchEvent(new CustomEvent('feedback-hub:update', { detail: { hidden: 
 it. It hides the round button, pill and choice menu, without interrupting a
 recording or submission. Updates may contain any subset of props; `status: null`
 clears the host status. None of these extensions require AI or add package routes.
+
+### Host trigger on phones
+
+Optionally pass `mobile-trigger="host" mobile-anchor="[data-feedback-trigger]"`
+to `floating-button`. At widths up to 760px this hides only the floating button
+and pill and places the existing menu below the element matching `mobile-anchor`
+(fallback: 60px from the top). Wider screens and the default remain unchanged.
+The host trigger dispatches `open-feedback-hub` to open the menu; a status bar
+can dispatch `open-feedback-hub-status` to open the current conversation.
+Use the same `status` and `myFeedbackBadge` values, following `feedback-hub:update`
+and its `hidden` flag. Stop the trigger click propagation so the menu's outside
+click handler does not immediately dismiss it. No report content is rendered by
+these events; ownership checks remain in the host conversation route.

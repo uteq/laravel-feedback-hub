@@ -1,4 +1,4 @@
-@props(['floating' => true, 'followUpUrl' => null, 'followUpWaitMs' => 3000, 'contextLabel' => null, 'myFeedbackUrl' => null, 'myFeedbackBadge' => 0, 'submitLabel' => null, 'notice' => null, 'status' => null])
+@props(['floating' => true, 'followUpUrl' => null, 'followUpWaitMs' => 3000, 'contextLabel' => null, 'myFeedbackUrl' => null, 'myFeedbackBadge' => 0, 'submitLabel' => null, 'notice' => null, 'status' => null, 'mobileTrigger' => null, 'mobileAnchor' => null])
 
 @php($chatEnabled = \Uteq\FeedbackHub\Support\FeedbackAiAvailability::available())
 @php($video = [
@@ -103,6 +103,11 @@
             .fh-uteq svg { color:#135d66; flex:none; margin-top:1px; }
             .fh-body.fh-body-with-notice { padding-bottom:4px; }
             .fh-uteq strong { font-weight:650; }
+            @media (max-width: 760px) {
+                .fh-widget[data-mobile-trigger="host"] .fh-button,
+                .fh-widget[data-mobile-trigger="host"] .fh-pill { display:none !important; }
+                .fh-widget[data-mobile-trigger="host"] .fh-choice { top:var(--fh-mobile-menu-top, 60px); bottom:auto; right:12px; max-width:calc(100vw - 24px); max-height:calc(100dvh - var(--fh-mobile-menu-top, 60px) - 12px); }
+            }
             @media (max-width: 480px) {
                 .fh-backdrop { padding: 12px; }
                 .fh-modal { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); }
@@ -125,13 +130,15 @@
     <script type="application/json" data-feedback-hub-props>{!! json_encode(['contextLabel' => $contextLabel, 'myFeedbackBadge' => (int) $myFeedbackBadge, 'myFeedbackUrl' => $myFeedbackUrl, 'submitLabel' => $submitLabel, 'notice' => $notice, 'status' => $status], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}</script>
     <div x-persist="feedback-hub">
     <div
-        x-data="feedbackHubWidget({ endpoint: @js(route('feedback-hub.store')), followUpUrl: @js($followUpUrl), followUpWaitMs: @js($followUpWaitMs), contextLabel: @js($contextLabel), myFeedbackUrl: @js($myFeedbackUrl), myFeedbackBadge: @js((int) $myFeedbackBadge), chatEndpoint: @js(route('feedback-hub.chat'), JSON_UNESCAPED_SLASHES), csrfEndpoint: @js(route('feedback-hub.csrf'), JSON_UNESCAPED_SLASHES), chatEnabled: {{ $chatEnabled ? 'true' : 'false' }}, video: @js($video, JSON_UNESCAPED_SLASHES) })"
+        x-data="feedbackHubWidget({ mobileAnchor: @js($mobileAnchor), endpoint: @js(route('feedback-hub.store')), followUpUrl: @js($followUpUrl), followUpWaitMs: @js($followUpWaitMs), contextLabel: @js($contextLabel), myFeedbackUrl: @js($myFeedbackUrl), myFeedbackBadge: @js((int) $myFeedbackBadge), chatEndpoint: @js(route('feedback-hub.chat'), JSON_UNESCAPED_SLASHES), csrfEndpoint: @js(route('feedback-hub.csrf'), JSON_UNESCAPED_SLASHES), chatEnabled: {{ $chatEnabled ? 'true' : 'false' }}, video: @js($video, JSON_UNESCAPED_SLASHES) })"
         x-on:feedback-hub-captured.window="handleCapture($event.detail)"
         x-on:feedback-hub-screenshot-captured.window="handleScreenshot($event.detail)"
         x-on:open-feedback-hub.window="start"
-        x-on:resize.window="shotRevision++"
+        x-on:open-feedback-hub-status.window="openStatus()"
+        x-on:resize.window="shotRevision++; positionMobileMenu()"
         class="fh-widget"
         data-feedback-hub-widget
+        data-mobile-trigger="{{ $mobileTrigger }}"
     >
         <div x-on:click.outside="showChoice = false" x-on:keydown.escape.window="showChoice = false">
         <div class="fh-choice" x-cloak x-show="showChoice && !hidden" x-transition.opacity role="menu" aria-label="Feedback geven" data-feedback-hub-choice>
