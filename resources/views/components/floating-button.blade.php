@@ -43,7 +43,7 @@
             .fh-record-dot { width: 10px; height: 10px; border-radius: 999px; background: #dc2626; }
             .fh-video { display: block; max-height: 260px; width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; background: #0f172a; }
             .fh-video-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-            .fh-choice { position: fixed; right: 24px; bottom: 92px; max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px); overflow-y: auto; z-index: 55; display: flex; flex-direction: column; gap: 4px; width: 260px; border: 1px solid rgba(15, 23, 42, .12); border-radius: 12px; background: white; padding: 6px; box-shadow: 0 20px 48px rgba(15, 23, 42, .2); }
+            .fh-choice { position: fixed; right: 24px; bottom: 92px; max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px); overflow-y: auto; overflow-x: hidden; z-index: 55; display: flex; flex-direction: column; gap: 4px; width: 260px; border: 1px solid rgba(15, 23, 42, .12); border-radius: 12px; background: white; padding: 6px; box-shadow: 0 20px 48px rgba(15, 23, 42, .2); }
             .fh-choice-option { display: flex; align-items: flex-start; gap: 12px; border: 0; border-radius: 8px; background: transparent; padding: 10px 12px; color: #172026; text-align: left; font: inherit; cursor: pointer; }
             .fh-choice-option:hover, .fh-choice-option:focus-visible { background: #edf7f8; outline: none; }
             .fh-choice-option svg { flex: none; margin-top: 2px; color: #135d66; }
@@ -86,14 +86,17 @@
             .fh-button .fh-badge { position: absolute; right: -2px; top: -2px; }
             .fh-button.busy::before { content:""; position:absolute; inset:-5px; border-radius:999px; border:3px solid rgba(19,93,102,.18); border-top-color:#135d66; animation:fh-spin 1s linear infinite; }
             .fh-pill { position:fixed; right:92px; bottom:34px; z-index:50; display:inline-flex; gap:8px; align-items:center; max-width:calc(100vw - 110px); box-sizing:border-box; background:#fff; border:1px solid #e7eaee; border-radius:999px; padding:7px 14px 7px 11px; min-height:36px; line-height:20px; font:inherit; font-size:13.5px; box-shadow:0 10px 26px rgba(15,23,42,.14); color:#172026; cursor:pointer; text-align:left; }
+            .fh-pill > span:last-child { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+            .fh-pill > svg, .fh-pill > .fh-spinner { flex:none; }
             .fh-pill:hover { background:#f8fafa; }
             .fh-pill.att { border-color:#fdba74; background:#fff7ed; color:#7c2d12; }
             .fh-pill.att strong { color:#c2410c; font-weight:650; }
             .fh-pill .fh-spinner, .fh-pend .fh-spinner { width:12px; height:12px; box-sizing:border-box; border:2px solid #d6dfe0; border-top-color:#135d66; }
             .fh-pend { display:flex; align-items:center; gap:10px; width:100%; border:0; background:#f7fafa; border-radius:8px; padding:9px 12px; min-height:56px; box-sizing:border-box; line-height:18px; text-align:left; font:inherit; font-size:13px; cursor:pointer; }
             .fh-pend:hover { background:#edf7f8; }
-            .fh-pend .tt { display:block; font-weight:650; color:#172026; overflow-wrap:anywhere; }
-            .fh-pend .sub { display:block; margin-top:2px; color:#64748b; overflow-wrap:anywhere; }
+            .fh-pend > span:not(.fh-spinner) { min-width:0; flex:1; }
+            .fh-pend .tt { display:block; font-weight:650; color:#172026; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+            .fh-pend .sub { display:block; margin-top:2px; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
             .fh-pend.att .sub { color:#c2410c; font-weight:600; }
             .fh-pend .pch { margin-left:auto; color:#64748b; flex:none; }
             .fh-uteq { display:flex; gap:10px; align-items:flex-start; margin:0 18px 14px; background:#edf7f8; border-radius:8px; padding:10px 12px; font-size:13.5px; line-height:1.45; color:#1f3a3e; }
@@ -148,7 +151,7 @@
                 <button type="button" class="fh-pend" :class="{ att: item.state === 'attention' }" role="menuitem" x-on:click="openStatus(item.id)">
                     <span class="fh-spinner" x-show="item.state === 'busy'" aria-hidden="true"></span>
                     <svg x-show="item.state === 'attention'" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="color:#c2410c;flex:none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v6m0 3v1" stroke="currentColor" stroke-width="1.8"/></svg>
-                    <span><span class="tt" x-text="item.title"></span><span class="sub" x-text="item.line"></span></span>
+                    <span><span class="tt" :title="item.title" x-text="item.title"></span><span class="sub" x-text="item.line"></span></span>
                     <svg class="pch" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m9 6 6 6-6 6" stroke="currentColor" stroke-width="1.8"/></svg>
                 </button>
             </template>

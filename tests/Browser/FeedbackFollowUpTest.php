@@ -449,3 +449,18 @@ it('renders structured pill emphasis as escaped text', function (): void {
     $page->assertSee('<b>1 vraag</b>')->assertSee('<img src=x>')->assertNotPresent('.fh-pill b')->assertNotPresent('.fh-pill img')
         ->assertScript("getComputedStyle(document.querySelector('.fh-pill strong')).color", 'rgb(194, 65, 12)');
 });
+
+it('truncates long status rows and pills without horizontal overflow', function () {
+    $page = visit('/_follow');
+    foreach (['Moet ik deze feedback nog oppakken? '.str_repeat('lange titel ', 15), str_repeat('W', 300)] as $title) {
+        $encoded = json_encode($title);
+        $page->script("window.dispatchEvent(new CustomEvent('feedback-hub:update', {detail:{status:{state:'attention',label:$encoded,items:[{id:'long',title:$encoded,line:$encoded,state:'attention'}]}}}))");
+        $page->assertVisible('.fh-pill')->assertScript("document.querySelector('.fh-pill').scrollWidth <= document.querySelector('.fh-pill').clientWidth", true);
+        $page->click('.fh-button')->assertVisible('.fh-pend')
+            ->assertScript("document.querySelector('.fh-choice').scrollWidth <= document.querySelector('.fh-choice').clientWidth", true)
+            ->assertScript("['.tt','.sub'].every(s => { const e=document.querySelector('.fh-pend '+s); const c=getComputedStyle(e); return c.textOverflow==='ellipsis' && c.whiteSpace==='nowrap' && e.scrollWidth>e.clientWidth; })", true)
+            ->assertScript("document.querySelector('.fh-pend .tt').title", $title)
+            ->assertScript("document.querySelector('.fh-pend .pch').getBoundingClientRect().right <= document.querySelector('.fh-choice').getBoundingClientRect().right", true);
+        $page->script("document.querySelector('.fh-widget')._x_dataStack[0].showChoice=false");
+    }
+});
