@@ -38,6 +38,7 @@ beforeEach(function (): void {
                         fields: [...clone.querySelectorAll('[data-private]')].map(n => ({ value: n.value, attribute: n.getAttribute('value'), text: n.tagName === 'TEXTAREA' ? n.textContent : '' })),
                         ordinary: clone.querySelector('[name=ordinary]').value,
                         widget: !!clone.querySelector('[data-feedback-hub-widget]'),
+                        hostChrome: !!clone.querySelector('[data-feedback-hub-exclude]'),
                         banner: !!clone.querySelector('#feedback-hub-instruction-banner'),
                         blocker: !!clone.querySelector('#feedback-hub-interaction-blocker'),
                         highlight: clone.querySelector('#feedback-hub-highlight-overlay')?.style.display,
@@ -64,6 +65,7 @@ beforeEach(function (): void {
                     window.captured = { ...e.detail, width: image.naturalWidth, height: image.naturalHeight };
                 });
             </script>
+            <div data-feedback-hub-exclude><button>Host feedback trigger</button><div>Host feedback status</div></div>
             <h1 id="capture-target">Een onderdeel om feedback over te geven</h1>
             <input data-private type="password" value="password-fixture">
             <input data-private name="api_token" value="token-fixture">
@@ -179,7 +181,7 @@ it('captures a viewport PNG without a browser prompt and redacts only the clone'
         ->assertScript('window.cloneState.fields.length', 10)
         ->assertScript('window.cloneState.fields.every(n => n.value === "" && n.attribute === "" && n.text === "")')
         ->assertScript('window.cloneState.ordinary', 'ordinary-fixture')
-        ->assertScript('!window.cloneState.widget && !window.cloneState.banner && !window.cloneState.blocker')
+        ->assertScript('!window.cloneState.hostChrome && !window.cloneState.widget && !window.cloneState.banner && !window.cloneState.blocker')
         ->assertScript('window.cloneState.highlight', 'block')
         ->assertScript('window.FeedbackHubInspector.highlightOverlay.style.display', 'none')
         ->assertScript('[...document.querySelectorAll("[data-private]")].every(n => n.value.endsWith("fixture"))');

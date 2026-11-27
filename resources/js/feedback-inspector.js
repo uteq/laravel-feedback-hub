@@ -237,7 +237,7 @@ window.FeedbackHubInspector = {
                     clip: 'viewport',
                     scale: 1,
                     dpr: 1, // Keep CSS-pixel dimensions on retina screens too.
-                    exclude: ['[data-feedback-hub-widget]', '#feedback-hub-instruction-banner', '#feedback-hub-interaction-blocker'],
+                    exclude: ['[data-feedback-hub-widget]', '[data-feedback-hub-exclude]', '#feedback-hub-instruction-banner', '#feedback-hub-interaction-blocker'],
                     plugins: [redaction],
                 });
 

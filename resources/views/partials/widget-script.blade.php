@@ -48,6 +48,15 @@
                     const node = document.querySelector('script[data-feedback-hub-props]');
                     try { if (node) this.updateProps(JSON.parse(node.textContent)); } catch (_) {}
                 };
+                this.$watch('showChoice', open => {
+                    if (this.$el.dataset.mobileTrigger !== 'host' || !window.matchMedia('(max-width: 760px)').matches) return;
+                    if (open) {
+                        this.$nextTick(() => this.$el.querySelector('[data-feedback-hub-choice] [role="menuitem"]')?.focus());
+                    } else {
+                        const anchor = config.mobileAnchor ? document.querySelector(config.mobileAnchor) : null;
+                        anchor?.focus({ preventScroll: true });
+                    }
+                });
                 this.onNavigate();
                 this.onUpdate = event => this.updateProps(event.detail || {});
                 document.addEventListener('livewire:navigated', this.onNavigate);

@@ -20,7 +20,7 @@ beforeEach(function (): void {
             submit-label="Discuss with AI" :notice="['title'=>'Our team receives this.', 'text'=>'AI reviews it first.']" :status="['state'=>'busy','label'=>'Reviewing','items'=>[['id'=>'one','title'=>'Delivery','line'=>'Reviewing','state'=>'busy']]]"
             BLADE : '';
         if ($mode === 'mobile-host') {
-            $hostProps = 'mobile-trigger="host" mobile-anchor="h1"';
+            $hostProps = 'mobile-trigger="host" mobile-anchor="[data-test-mobile-trigger]"';
         }
         $html = BrowserTestLayout::render(<<<HTML
             <script>
@@ -62,7 +62,7 @@ beforeEach(function (): void {
                     return originalFetch(url, options);
                 };
             </script>
-            <style>body {font-family: ui-sans-serif, system-ui, sans-serif;}</style><h1>Levering plannen</h1>
+            <style>body {font-family: ui-sans-serif, system-ui, sans-serif;}</style><h1>Levering plannen</h1><button data-test-mobile-trigger onclick="event.stopPropagation(); window.dispatchEvent(new CustomEvent('open-feedback-hub'))">Feedback</button>
             <a href="/_follow/second" wire:navigate>Andere pagina</a>
             <label for="delivery-date">Leverdatum</label><input id="delivery-date" value="private-field-value">
             <x-feedback-hub::floating-button follow-up-url="/_follow-up" :follow-up-wait-ms="200" context-label="{$context}" {$hostProps} my-feedback-url="{$mine}" :my-feedback-badge="{$badge}" />
@@ -472,9 +472,13 @@ it('lets a host open its phone menu below its anchor while keeping the desktop t
     $page = visit('/_follow/mobile-host');
     $page->resize(390, 844);
     $page->assertNotPresent('.fh-button:visible')->assertNotPresent('.fh-pill:visible');
-    $page->script("window.dispatchEvent(new CustomEvent('open-feedback-hub'))");
+    $page->click('[data-test-mobile-trigger]');
     $page->assertVisible('.fh-choice')->assertSee('Schermafbeelding')
-        ->assertScript("Math.abs(document.querySelector('.fh-choice').getBoundingClientRect().top - document.querySelector('h1').getBoundingClientRect().bottom - 8) < 1");
+        ->assertScript("document.activeElement === document.querySelector('.fh-choice [role=menuitem]')")
+        ->assertScript("Math.abs(document.querySelector('.fh-choice').getBoundingClientRect().top - document.querySelector('[data-test-mobile-trigger]').getBoundingClientRect().bottom - 8) < 1");
+    $page->keys('.fh-choice [role=menuitem] >> nth=0', 'Escape');
+    $page->assertNotPresent('.fh-choice:visible')->assertScript("document.activeElement === document.querySelector('[data-test-mobile-trigger]')");
+    $page->click('[data-test-mobile-trigger]');
     $page->resize(1440, 900);
     $page->assertVisible('.fh-button')->assertScript("getComputedStyle(document.querySelector('.fh-choice')).bottom", '92px');
 });

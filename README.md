@@ -435,3 +435,7 @@ Use the same `status` and `myFeedbackBadge` values, following `feedback-hub:upda
 and its `hidden` flag. Stop the trigger click propagation so the menu's outside
 click handler does not immediately dismiss it. No report content is rendered by
 these events; ownership checks remain in the host conversation route.
+
+Host feedback chrome should carry `data-feedback-hub-exclude` so it is left out
+of captured screenshots. In host mobile mode opening the menu focuses its first
+item; closing it restores focus to the matching `mobile-anchor` element.
