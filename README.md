@@ -110,8 +110,13 @@ errors and network requests, GitHub/Linear links, UUID, reference and creation t
 It attaches the screenshot when available and adds `video_url` when there is a screen recording. The transcript and form state are never sent.
 The receiver deduplicates reports on `uuid`, including job retries.
 
-A URL without a key logs a warning and skips delivery. HTTP 4xx responses log a warning
-without failing the report; HTTP 5xx responses and connection errors use the job's retries.
+A 4xx answer means the receiver refused the report and a retry will not help: the report is marked `failed`
+with the status and a short excerpt of the answer in `last_error`, the job is not retried, and (when Telegram
+is configured) one warning is sent as a reply to the report's Telegram message. After fixing the receiver,
+dispatch `ProcessFeedbackReportJob` for the report again: Telegram is skipped and the OS inbox send runs again.
+5xx and connection errors are still retried by the queue.
+
+A URL without a key logs a warning and skips delivery.
 The health command checks configuration only for this destination; use test delivery to
 exercise the endpoint.
 
