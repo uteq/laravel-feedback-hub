@@ -621,13 +621,13 @@ describe('os inbox delivery', function (): void {
             ->and($this->report->last_error)->toBeNull();
     });
 
-    it('warns without failing or retrying for a client error', function (int $status): void {
+    it('fails without retrying for a client error', function (int $status): void {
         Http::fake(['os.example.test/inbox' => Http::response(['message' => 'Rejected'], $status)]);
-        Log::shouldReceive('warning')->once()->with('os_inbox_rejected', ['report' => $this->report->getKey(), 'status' => $status]);
+        Log::shouldReceive('warning')->once()->with('os_inbox_rejected', ['report' => $this->report->getKey(), 'status' => $status, 'excerpt' => 'Rejected']);
         app()->call([new ProcessFeedbackReportJob($this->report), 'handle']);
         Http::assertSentCount(1);
-        expect($this->report->refresh()->status)->toBe('synced')
-            ->and($this->report->last_error)->toBeNull();
+        expect($this->report->refresh()->status)->toBe('failed')
+            ->and($this->report->last_error)->toContain("HTTP {$status}")->toContain('Rejected');
     })->with([401, 422, 429]);
 
     it('fails and rethrows server errors for the existing job retries', function (): void {
@@ -642,4 +642,116 @@ describe('os inbox delivery', function (): void {
         expect(fn () => app()->call([new ProcessFeedbackReportJob($this->report), 'handle']))->toThrow(ConnectionException::class);
         expect($this->report->refresh()->status)->toBe('failed');
     });
+});
+
+function osInboxRejectionReport(): FeedbackReport
+{
+    config()->set('feedback-hub.github.enabled', false);
+    config()->set('feedback-hub.linear.enabled', false);
+    config()->set('feedback-hub.os_inbox.url', 'https://os.example.test/inbox');
+    config()->set('feedback-hub.os_inbox.key', 'os-test-key');
+    config()->set('feedback-hub.telegram.bot_token', 'telegram-token');
+    config()->set('feedback-hub.telegram.chat_id', '-100123');
+
+    return FeedbackReport::query()->create([
+        'project' => 'Test Project',
+        'type' => 'bug',
+        'title' => 'Bug report',
+        'page_url' => 'https://example.test/dashboard',
+        'telegram_message_id' => '44',
+    ]);
+}
+
+function runReportJob(FeedbackReport $report): void
+{
+    app(ProcessFeedbackReportJob::class, ['report' => $report])->handle(
+        app(GitHubFeedbackClient::class),
+        app(LinearFeedbackClient::class),
+        app(TelegramFeedbackClient::class),
+        app(IssueBodyBuilder::class),
+    );
+}
+
+it('fails the report and warns telegram once as a reply when the os inbox rejects it', function (): void {
+    Http::fake([
+        'os.example.test/inbox' => Http::response(['message' => 'Unknown attribute video_url'], 422),
+        'api.telegram.org/bottelegram-token/sendMessage' => Http::response(['ok' => true, 'result' => ['message_id' => 45]]),
+    ]);
+
+    $report = osInboxRejectionReport();
+
+    runReportJob($report);
+
+    $report->refresh();
+
+    expect($report->status)->toBe('failed')
+        ->and($report->last_error)->toContain('HTTP 422')->toContain('Unknown attribute video_url');
+
+    $telegramRequests = Http::recorded(fn (Request $request): bool => str_contains($request->url(), 'api.telegram.org'));
+
+    expect($telegramRequests)->toHaveCount(1);
+
+    $request = $telegramRequests->first()[0];
+
+    expect($request['text'])->toContain($report->reference)->toContain('niet aangekomen in UteqOS')->toContain('HTTP 422')
+        ->and($request['parse_mode'])->toBe('HTML')
+        ->and(json_decode($request['reply_parameters'], true)['message_id'])->toBe(44);
+});
+
+it('still retries when the os inbox answers with a server error', function (): void {
+    Http::fake([
+        'os.example.test/inbox' => Http::response('boom', 500),
+        'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 45]]),
+    ]);
+
+    $report = osInboxRejectionReport();
+
+    expect(fn () => runReportJob($report))->toThrow(RequestException::class);
+
+    expect($report->refresh()->status)->toBe('failed');
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'api.telegram.org'));
+});
+
+it('syncs without a warning when the os inbox accepts the report', function (): void {
+    Http::fake(['os.example.test/inbox' => Http::response([], 201)]);
+
+    $report = osInboxRejectionReport();
+
+    runReportJob($report);
+
+    expect($report->refresh()->status)->toBe('synced');
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'api.telegram.org'));
+});
+
+it('keeps the rejection as last_error when the telegram warning fails', function (): void {
+    Http::fake([
+        'os.example.test/inbox' => Http::response(['message' => 'Unknown attribute video_url'], 422),
+        'api.telegram.org/*' => Http::response(['ok' => false], 500),
+    ]);
+
+    $report = osInboxRejectionReport();
+
+    runReportJob($report);
+
+    expect($report->refresh()->status)->toBe('failed')
+        ->and($report->last_error)->toContain('HTTP 422');
+});
+
+it('syncs on a later run once the os inbox accepts a previously rejected report', function (): void {
+    Http::fake([
+        'os.example.test/inbox' => Http::sequence()
+            ->push(['message' => 'Unknown attribute video_url'], 422)
+            ->push([], 201),
+        'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 45]]),
+    ]);
+
+    $report = osInboxRejectionReport();
+
+    runReportJob($report);
+    expect($report->refresh()->status)->toBe('failed');
+
+    runReportJob($report);
+
+    expect($report->refresh()->status)->toBe('synced')
+        ->and($report->last_error)->toBeNull();
 });

@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Uteq\FeedbackHub\Clients;
 
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Uteq\FeedbackHub\Exceptions\OsInboxRejectedException;
 use Uteq\FeedbackHub\Models\FeedbackReport;
+use Uteq\FeedbackHub\Support\FeedbackPayloadSanitizer;
 
 final class OsInboxFeedbackClient
 {
@@ -18,6 +22,10 @@ final class OsInboxFeedbackClient
             && filled(config('feedback-hub.os_inbox.key'));
     }
 
+    /**
+     * @throws OsInboxRejectedException on a 4xx answer (will not fix itself, do not retry)
+     * @throws RequestException on a 5xx answer (retryable)
+     */
     public function send(FeedbackReport $report): void
     {
         $payload = [
@@ -72,11 +80,26 @@ final class OsInboxFeedbackClient
         ]);
 
         if ($response->clientError()) {
-            Log::warning('os_inbox_rejected', ['report' => $report->getKey(), 'status' => $response->status()]);
+            $excerpt = $this->excerpt($response);
 
-            return;
+            Log::warning('os_inbox_rejected', ['report' => $report->getKey(), 'status' => $response->status(), 'excerpt' => $excerpt]);
+
+            throw new OsInboxRejectedException($response->status(), $excerpt);
         }
 
         $response->throw();
+    }
+
+    private function excerpt(Response $response): string
+    {
+        $body = $response->json('message');
+
+        if (! is_string($body) || $body === '') {
+            $body = $response->body();
+        }
+
+        $body = trim((string) preg_replace('/\s+/', ' ', strip_tags($body)));
+
+        return mb_substr(app(FeedbackPayloadSanitizer::class)->redactString($body), 0, 300);
     }
 }

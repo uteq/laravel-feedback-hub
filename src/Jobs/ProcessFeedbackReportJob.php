@@ -15,6 +15,7 @@ use Uteq\FeedbackHub\Clients\GitHubFeedbackClient;
 use Uteq\FeedbackHub\Clients\LinearFeedbackClient;
 use Uteq\FeedbackHub\Clients\OsInboxFeedbackClient;
 use Uteq\FeedbackHub\Clients\TelegramFeedbackClient;
+use Uteq\FeedbackHub\Exceptions\OsInboxRejectedException;
 use Uteq\FeedbackHub\Models\FeedbackReport;
 use Uteq\FeedbackHub\Support\FeedbackPayloadSanitizer;
 use Uteq\FeedbackHub\Support\IssueBodyBuilder;
@@ -112,7 +113,13 @@ class ProcessFeedbackReportJob implements ShouldBeUnique, ShouldQueue
                 if (! $osInbox->isConfigured()) {
                     Log::warning('os_inbox_not_configured', ['report' => $this->report->getKey()]);
                 } else {
-                    $osInbox->send($this->report);
+                    try {
+                        $osInbox->send($this->report);
+                    } catch (OsInboxRejectedException $rejection) {
+                        $this->handleOsInboxRejection($rejection, $telegram);
+
+                        return;
+                    }
                 }
             }
 
@@ -160,6 +167,38 @@ class ProcessFeedbackReportJob implements ShouldBeUnique, ShouldQueue
         }
 
         return $telegram->sendMessage($message, 'HTML', $buttons);
+    }
+
+    /**
+     * A 4xx from the OS inbox will not fix itself: fail the report without retrying and tell the Telegram chat once.
+     * Re-dispatching the job after the receiver is fixed works: Telegram is skipped (message id is set), the send runs again.
+     */
+    private function handleOsInboxRejection(OsInboxRejectedException $rejection, TelegramFeedbackClient $telegram): void
+    {
+        $this->markFailed($rejection->getMessage());
+
+        if (! $this->integrationEnabled('telegram') || ! $telegram->isConfigured()) {
+            return;
+        }
+
+        try {
+            $telegram->sendMessage(
+                sprintf(
+                    '⚠️ %s is niet aangekomen in UteqOS (HTTP %d): %s',
+                    e((string) ($this->report->reference ?? $this->report->getKey())),
+                    $rejection->status,
+                    e($rejection->excerpt),
+                ),
+                'HTML',
+                [],
+                $this->report->telegram_message_id ? (string) $this->report->telegram_message_id : null,
+            );
+        } catch (Throwable $exception) {
+            Log::warning('os_inbox_rejection_alert_failed', [
+                'report' => $this->report->getKey(),
+                'error' => mb_substr(app(FeedbackPayloadSanitizer::class)->redactString($exception->getMessage()), 0, 300),
+            ]);
+        }
     }
 
     private function markFailed(string $message): void

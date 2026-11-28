@@ -24,7 +24,7 @@ class TelegramFeedbackClient
      *
      * @throws RequestException
      */
-    public function sendMessage(string $text, ?string $parseMode = null, array $buttons = []): array
+    public function sendMessage(string $text, ?string $parseMode = null, array $buttons = [], ?string $replyToMessageId = null): array
     {
         $payload = [
             'chat_id' => $this->chatId(),
@@ -34,6 +34,13 @@ class TelegramFeedbackClient
 
         if ($parseMode) {
             $payload['parse_mode'] = $parseMode;
+        }
+
+        if (filled($replyToMessageId)) {
+            $payload['reply_parameters'] = json_encode([
+                'message_id' => (int) $replyToMessageId,
+                'allow_sending_without_reply' => true,
+            ]);
         }
 
         if ($buttons !== []) {
